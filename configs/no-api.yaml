@@ -1,0 +1,13 @@
+# configs/no-api.yaml
+_profile: no-api
+_extends: default
+
+detectors:
+  contrastive_gen:
+    enabled: false
+  dna_gpt:
+    enabled: false
+
+privacy:
+  external_api:
+    mode: "disabled"

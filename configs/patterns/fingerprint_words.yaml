@@ -1,0 +1,52 @@
+# configs/patterns/fingerprint_words.yaml
+# LLM signature vocabulary — single words
+words:
+  # Tier 1: High-confidence LLM fingerprints
+  - delve
+  - leverage
+  - utilize
+  - comprehensive
+  - nuanced
+  - multifaceted
+  - foster
+  - robust
+  - streamline
+  - paramount
+  - holistic
+  - synergy
+  - pivotal
+  - seamless
+  - adhere
+  - ensure
+  - underscore
+  - delineate
+  - elucidate
+  - facilitate
+  - endeavor
+  - testament
+  - intricate
+  - meticulous
+  - unwavering
+  - diligently
+  - commendable
+  - invaluable
+  - pertinent
+  - harness
+
+# LLM-characteristic bigrams
+bigrams:
+  - "it's important to note"
+  - "it is important to note"
+  - "it's worth mentioning"
+  - "it is worth noting"
+  - "serves as a"
+  - "plays a crucial role"
+  - "plays a pivotal role"
+  - "can be seen as"
+  - "in the realm of"
+  - "when it comes to"
+  - "taking into account"
+  - "a wide range of"
+  - "a variety of"
+  - "in today's"
+  - "not only"

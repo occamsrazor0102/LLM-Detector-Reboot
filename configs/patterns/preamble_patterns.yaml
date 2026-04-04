@@ -1,0 +1,20 @@
+# configs/patterns/preamble_patterns.yaml
+critical:
+  - name: assistant_ack
+    pattern: "(?i)^(Here(?:'s| is) (?:a |the |an |your ))"
+  - name: artifact_delivery
+    pattern: "(?i)^(I(?:'ve| have) created|I(?:'ll| will) create)"
+  - name: copy_paste_instruction
+    pattern: "(?i)^(Feel free to (use|modify|adapt|copy))"
+
+high:
+  - name: conversational_opener
+    pattern: "(?i)^(Sure[!,]|Absolutely[!,]|Of course[!,]|Great question|Certainly[!,])"
+  - name: meta_design
+    pattern: "(?i)^(I(?:'ve| have) designed|I(?:'ve| have) crafted|I(?:'ve| have) developed)"
+  - name: first_person_creation
+    pattern: "(?i)^(I(?:'ve| have) put together|I(?:'ve| have) prepared)"
+  - name: style_masking
+    pattern: "(?i)^(I(?:'ve| have) tried to (write|make|keep))"
+  - name: editorial_meta
+    pattern: "(?i)^(Note:|Note that|Please note|Important:|Keep in mind)"

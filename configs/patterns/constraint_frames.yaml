@@ -1,0 +1,26 @@
+# configs/patterns/constraint_frames.yaml
+# Used by prompt_structure detector for CFD/MFSR calculation
+frames:
+  - name: ensure_constraint
+    pattern: "\\b(?:ensure|make sure|guarantee|verify)\\b"
+    weight: 1.0
+  - name: must_constraint
+    pattern: "\\b(?:must|shall|should|need to|required to|expected to)\\b"
+    weight: 0.8
+  - name: avoid_constraint
+    pattern: "\\b(?:avoid|do not|don't|refrain from|never)\\b"
+    weight: 0.9
+  - name: include_constraint
+    pattern: "\\b(?:include|incorporate|integrate|address|cover)\\b"
+    weight: 0.7
+  - name: format_constraint
+    pattern: "\\b(?:format|structure|organize|present|provide)\\b.*\\b(?:as|in|using|with)\\b"
+    weight: 0.8
+  - name: length_constraint
+    pattern: "\\b(?:minimum|maximum|at least|no more than|between)\\b.*\\b(?:word|sentence|page|section|paragraph)\\b"
+    weight: 1.0
+
+meta_design_patterns:
+  - "(?i)\\b(?:task|prompt|question|exercise|challenge|scenario|assignment)\\b"
+  - "(?i)\\b(?:assess|evaluate|test|measure|demonstrate)\\b.*\\b(?:ability|skill|knowledge|understanding|competence)\\b"
+  - "(?i)\\b(?:rubric|criteria|marking|grading|scoring)\\b"

@@ -1,0 +1,23 @@
+# configs/screening.yaml
+_profile: screening
+_extends: default
+
+detectors:
+  surprisal_dynamics:
+    enabled: false
+  contrastive_lm:
+    enabled: false
+  token_cohesiveness:
+    enabled: false
+  perturbation:
+    enabled: false
+  contrastive_gen:
+    enabled: false
+  dna_gpt:
+    enabled: false
+  mixed_boundary:
+    enabled: false
+
+decision:
+  red_threshold: 0.80
+  amber_threshold: 0.60

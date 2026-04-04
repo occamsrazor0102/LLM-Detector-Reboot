@@ -1,0 +1,90 @@
+# configs/default.yaml
+_profile: default
+
+detectors:
+  preamble:
+    enabled: true
+    weight: 1.0
+  fingerprint_vocab:
+    enabled: true
+    weight: 0.8
+  prompt_structure:
+    enabled: true
+    weight: 0.85
+  voice_spec:
+    enabled: true
+    weight: 0.80
+  instruction_density:
+    enabled: true
+    weight: 0.75
+  nssi:
+    enabled: true
+    weight: 0.70
+  surprisal_dynamics:
+    enabled: true
+    weight: 0.85
+  contrastive_lm:
+    enabled: true
+    weight: 0.90
+  perturbation:
+    enabled: false
+    weight: 0.80
+  token_cohesiveness:
+    enabled: true
+    weight: 0.75
+  contrastive_gen:
+    enabled: false
+    weight: 0.95
+    provider: "anthropic"
+    model: "claude-sonnet-4-6"
+    n_baselines: 3
+  dna_gpt:
+    enabled: false
+    weight: 0.85
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+  mixed_boundary:
+    enabled: true
+    weight: 0.80
+  cross_similarity:
+    enabled: false
+    weight: 0.70
+  contributor_graph:
+    enabled: false
+    weight: 0.60
+
+cascade:
+  phase1_short_circuit_high: 0.85
+  phase1_short_circuit_low: 0.10
+  phase2_short_circuit_high: 0.80
+  phase2_short_circuit_low: 0.15
+  phase3_always_run: false
+
+decision:
+  red_threshold: 0.75
+  amber_threshold: 0.50
+  yellow_threshold: 0.25
+  abstention:
+    enabled: true
+    max_prediction_set_size: 3
+    label: "UNCERTAIN"
+    action: "route_to_human_review"
+  mixed:
+    enabled: true
+    min_mixed_probability: 0.60
+
+privacy:
+  raw_text_retention_days: 90
+  access_logging: true
+  contributor_anonymization_days: 365
+  external_api:
+    mode: "restricted"
+    allowed_providers:
+      - "anthropic"
+    log_all_api_calls: true
+
+router:
+  minimum_words:
+    prompt: 30
+    prose: 150
+    mixed: 300

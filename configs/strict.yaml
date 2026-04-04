@@ -1,0 +1,21 @@
+# configs/strict.yaml
+_profile: strict
+_extends: default
+
+decision:
+  red_threshold: 0.65
+  amber_threshold: 0.45
+  yellow_threshold: 0.20
+  abstention:
+    enabled: false
+
+cascade:
+  phase3_always_run: true
+
+detectors:
+  perturbation:
+    enabled: true
+  contrastive_gen:
+    enabled: true
+  dna_gpt:
+    enabled: true
