@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude plugin:*)",
+      "Bash(where claude:*)",
+      "Bash(cmd.exe /c \"where claude\")",
+      "Bash(powershell.exe -Command \"Get-Command claude -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(cmd.exe /c \"claude plugin install superpowers@claude-plugins-official\")",
+      "Bash(powershell.exe -Command \"claude plugin install superpowers@claude-plugins-official\")"
+    ]
+  }
+}
