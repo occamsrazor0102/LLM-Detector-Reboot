@@ -4,7 +4,7 @@ from beet.contracts import Determination, LayerResult
 from beet.normalizer import normalize_text
 from beet.router import TextRouter
 from beet.cascade import CascadeScheduler
-from beet.fusion.ebm import NaiveFusion
+from beet.fusion.ebm import EBMFusion, DEFAULT_FUSION
 from beet.decision import DecisionEngine
 import beet.detectors as detector_registry
 
@@ -13,7 +13,7 @@ class BeetPipeline:
         self._config = config
         self._router = TextRouter(config)
         self._cascade = CascadeScheduler(config)
-        self._fusion = NaiveFusion()
+        self._fusion = DEFAULT_FUSION  # uses naive until EBM is trained
         self._decision = DecisionEngine(config)
         self._detectors = detector_registry.get_all_detectors()
 
