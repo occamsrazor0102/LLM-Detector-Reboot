@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "beet"
+version = "2.0.0"
+description = "BEET 2.0 — LLM Authorship Detection Pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+tier2 = [
+    "transformers>=4.40",
+    "torch>=2.2",
+    "sentence-transformers>=3.0",
+]
+tier3 = [
+    "anthropic>=0.25",
+    "openai>=1.20",
+]
+fusion = [
+    "interpret>=0.6",
+    "scikit-learn>=1.4",
+    "scipy>=1.12",
+    "numpy>=1.26",
+]
+batch = [
+    "networkx>=3.3",
+    "scikit-learn>=1.4",
+]
+api = [
+    "fastapi>=0.111",
+    "uvicorn>=0.29",
+]
+full = [
+    "beet[tier2,tier3,fusion,batch,api]",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+beet = "beet.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
