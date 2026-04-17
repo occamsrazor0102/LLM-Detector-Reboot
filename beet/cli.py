@@ -68,3 +68,93 @@ def batch(input_file, config, profile, text_column, output_file):
     out_path = output_file or str(Path(input_file).with_suffix(".beet.csv"))
     out_df.to_csv(out_path, index=False)
     click.echo(f"\nResults saved to: {out_path}")
+
+
+def _resolve_config_path(config, profile):
+    return config or (Path(__file__).parent.parent / "configs" / f"{profile}.yaml")
+
+
+def _format_metrics_block(title: str, metrics: dict) -> str:
+    lines = [title]
+    for k in ("auroc", "ece", "brier", "tpr_at_fpr_01"):
+        if k in metrics:
+            v = metrics[k]
+            lines.append(f"  {k:<14} {v:.4f}")
+    return "\n".join(lines)
+
+
+@main.command("eval")
+@click.argument("dataset_path", type=click.Path(exists=True))
+@click.option("--config", "-c", default=None, type=click.Path(exists=True))
+@click.option("--profile", "-p", default="default",
+              type=click.Choice(["default", "strict", "screening", "no-api"]))
+@click.option("--output", default="text", type=click.Choice(["text", "json"]))
+@click.option("--out", "out_file", default=None, type=click.Path(), help="Write JSON report to file")
+@click.option("--progress/--no-progress", default=False)
+def eval_cmd(dataset_path, config, profile, output, out_file, progress):
+    """Run evaluation on a labeled JSONL dataset."""
+    from beet.evaluation import load_dataset, run_eval
+    from dataclasses import asdict
+
+    dataset = load_dataset(dataset_path)
+    pipeline = BeetPipeline.from_config_file(_resolve_config_path(config, profile))
+    report = run_eval(pipeline, dataset, progress=progress)
+
+    report_dict = asdict(report)
+    if out_file:
+        Path(out_file).write_text(json.dumps(report_dict, indent=2), encoding="utf-8")
+
+    if output == "json":
+        click.echo(json.dumps(report_dict, indent=2))
+    else:
+        click.echo(f"Samples: {report.n_samples}  (failed: {len(report.failed_samples)})")
+        click.echo(f"Config hash: {report.config_hash}")
+        click.echo(_format_metrics_block("\nOverall:", report.metrics))
+        for tier, m in report.per_tier.items():
+            click.echo(_format_metrics_block(f"\n[{tier}]", m))
+
+
+@main.command("ablation")
+@click.argument("dataset_path", type=click.Path(exists=True))
+@click.option("--config", "-c", default=None, type=click.Path(exists=True))
+@click.option("--profile", "-p", default="default",
+              type=click.Choice(["default", "strict", "screening", "no-api"]))
+@click.option("--detectors", "detectors_csv", default=None,
+              help="Comma-separated list of detectors to ablate (default: all enabled)")
+@click.option("--confirm", is_flag=True, default=False,
+              help="Confirm expensive runs (>1000 estimated model calls)")
+@click.option("--out", "out_file", default=None, type=click.Path())
+@click.option("--progress/--no-progress", default=False)
+def ablation_cmd(dataset_path, config, profile, detectors_csv, confirm, out_file, progress):
+    """Run leave-one-out ablation across detectors."""
+    from beet.evaluation import load_dataset, run_ablation, verdict_for
+    from beet.config import load_config
+    from dataclasses import asdict
+
+    dataset = load_dataset(dataset_path)
+    cfg_path = _resolve_config_path(config, profile)
+    base_config = load_config(Path(cfg_path))
+
+    targets = None
+    if detectors_csv:
+        targets = [d.strip() for d in detectors_csv.split(",") if d.strip()]
+
+    enabled = [n for n, c in base_config.get("detectors", {}).items() if c.get("enabled", True)]
+    n_ablations = len(targets or enabled)
+    estimated_calls = n_ablations * len(dataset)
+    if estimated_calls > 1000 and not confirm:
+        click.echo(f"Refusing: ~{estimated_calls} pipeline calls estimated. Re-run with --confirm.", err=True)
+        sys.exit(2)
+
+    report = run_ablation(base_config, dataset, detectors=targets, progress=progress)
+
+    if out_file:
+        Path(out_file).write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
+
+    click.echo(_format_metrics_block("Baseline:", report.baseline.metrics))
+    click.echo("")
+    click.echo(f"{'Detector':<24} {'ΔAUROC':>10}  {'ΔECE':>8}  Verdict")
+    click.echo("-" * 60)
+    for name, _abs in report.ranked:
+        d = report.deltas[name]
+        click.echo(f"{name:<24} {d['delta_auroc']:>+10.4f}  {d['delta_ece']:>+8.4f}  {verdict_for(d['delta_auroc'])}")
