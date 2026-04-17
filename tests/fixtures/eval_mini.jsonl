@@ -1,0 +1,6 @@
+{"id": "human_001", "text": "okay so i've been at this for three weeks now and honestly the reagent concentrations keep drifting", "label": 0, "tier": "human", "source": "reddit_r_labwork"}
+{"id": "human_002", "text": "gonna try moving everything to the cold room next week and see if that helps. temperature logs look noisy.", "label": 0, "tier": "human", "source": "reddit_r_labwork"}
+{"id": "human_003", "text": "Reagent Preparation Protocol Version 2.1. Verify lot numbers. Prepare 10 mM stock in PBS pH 7.4.", "label": 0, "tier": "human", "source": "internal_sop"}
+{"id": "llm_a0_001", "text": "Here's a comprehensive pharmacokinetics task for Drug X that you can use: Design a single-dose study with robust sampling.", "label": 1, "tier": "A0", "source": "claude_default"}
+{"id": "llm_a0_002", "text": "Certainly! Below is a detailed training module on hand hygiene, covering the WHO five moments and interactive scenarios.", "label": 1, "tier": "A0", "source": "gpt4_default"}
+{"id": "llm_a1_001", "text": "Create a 30-minute training module on hand hygiene for new nursing staff, covering WHO five moments and proper technique.", "label": 1, "tier": "A1", "source": "claude_paraphrased"}
