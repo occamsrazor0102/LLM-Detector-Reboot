@@ -115,6 +115,36 @@ def per_tier_breakdown(
     return out
 
 
+def per_attack_breakdown(
+    samples: Sequence,
+    predictions: Sequence,
+    metric_fn: Callable[[Sequence[int], Sequence[float]], float],
+) -> dict[str, float]:
+    """Group predictions by sample.attack_name and apply metric_fn."""
+    def get(obj, key):
+        if hasattr(obj, key):
+            return getattr(obj, key)
+        return obj.get(key) if isinstance(obj, dict) else None
+
+    pred_by_id = {get(p, "id"): get(p, "p_llm") for p in predictions}
+    groups: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for s in samples:
+        attack = get(s, "attack_name")
+        if attack is None:
+            continue
+        sid = get(s, "id")
+        if sid not in pred_by_id:
+            continue
+        groups[attack].append((int(get(s, "label")), float(pred_by_id[sid])))
+
+    out = {}
+    for attack, pairs in groups.items():
+        labels = [a for a, _ in pairs]
+        scores = [b for _, b in pairs]
+        out[attack] = metric_fn(labels, scores)
+    return out
+
+
 def summarize(y_true: Sequence[int], y_score: Sequence[float]) -> dict:
     return {
         "auroc": auroc(y_true, y_score),

@@ -12,6 +12,7 @@ from beet.evaluation.metrics import (
     tpr_at_fpr,
     confusion_at_threshold,
     per_tier_breakdown,
+    per_attack_breakdown,
     summarize,
 )
 from beet.evaluation.runner import EvalReport, run_eval
@@ -28,6 +29,7 @@ __all__ = [
     "tpr_at_fpr",
     "confusion_at_threshold",
     "per_tier_breakdown",
+    "per_attack_breakdown",
     "summarize",
     "EvalReport",
     "run_eval",

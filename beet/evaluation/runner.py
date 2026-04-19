@@ -24,6 +24,7 @@ class EvalReport:
     n_samples: int
     config_hash: str
     failed_samples: list[dict] = field(default_factory=list)
+    per_attack: dict[str, dict] = field(default_factory=dict)
 
 
 def _config_hash(config: dict | None) -> str:
@@ -91,6 +92,19 @@ def run_eval(
         ys = [p["p_llm"] for p in preds]
         per_tier[tier] = summarize(yt, ys)
 
+    sample_by_id = {s.id: s for s in kept}
+    attack_groups: dict[str, list[dict]] = defaultdict(list)
+    for p in predictions:
+        s = sample_by_id.get(p["id"])
+        if s is None or s.attack_name is None:
+            continue
+        attack_groups[s.attack_name].append(p)
+    per_attack = {}
+    for attack, preds in attack_groups.items():
+        yt = [p["label"] for p in preds]
+        ys = [p["p_llm"] for p in preds]
+        per_attack[attack] = summarize(yt, ys)
+
     return EvalReport(
         predictions=predictions,
         metrics=metrics,
@@ -98,4 +112,5 @@ def run_eval(
         n_samples=len(predictions),
         config_hash=_config_hash(_extract_config(pipeline)),
         failed_samples=failed,
+        per_attack=per_attack,
     )
