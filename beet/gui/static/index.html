@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BEET 2.0 — LLM Authorship Detection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --ink: #e6edf3;
+      --muted: #8b949e;
+      --line: #30363d;
+      --red: #d1495b;
+      --amber: #e4a33a;
+      --yellow: #dbcd53;
+      --green: #57a773;
+      --uncertain: #7a7a7a;
+    }
+    html, body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 12px; }
+    main { display: grid; grid-template-columns: 1fr 420px; gap: 16px; padding: 16px 24px; max-width: 1400px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+    textarea {
+      width: 100%; box-sizing: border-box; min-height: 320px; background: #0b0f14;
+      border: 1px solid var(--line); color: var(--ink); border-radius: 4px; padding: 12px;
+      font: 13px/1.45 ui-monospace, Menlo, "Consolas", monospace; resize: vertical;
+    }
+    button {
+      background: #1f6feb; color: white; border: 0; padding: 9px 16px; border-radius: 5px;
+      font-weight: 600; cursor: pointer; margin-top: 10px;
+    }
+    button:hover { background: #1a5ac7; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .badge {
+      display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: 700;
+      letter-spacing: 0.05em; font-size: 13px;
+    }
+    .RED { background: var(--red); color: white; }
+    .AMBER { background: var(--amber); color: #2a1e00; }
+    .YELLOW { background: var(--yellow); color: #2a2500; }
+    .GREEN { background: var(--green); color: white; }
+    .UNCERTAIN, .MIXED { background: var(--uncertain); color: white; }
+    .gauge {
+      position: relative; height: 8px; background: #21262d; border-radius: 4px; margin: 10px 0 6px;
+    }
+    .gauge .fill { position: absolute; top: 0; left: 0; height: 100%; background: #3e8cf8; border-radius: 4px; }
+    .gauge .ci { position: absolute; top: -4px; height: 16px; border-left: 1px solid #8b949e; border-right: 1px solid #8b949e; }
+    .metrics { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin-top: 10px; }
+    .metrics .k { color: var(--muted); }
+    .contribs { margin-top: 12px; }
+    .contribs .row { display: grid; grid-template-columns: 1fr auto; padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+    .contribs .row:last-child { border-bottom: 0; }
+    .reason { color: var(--muted); font-size: 12px; margin-top: 10px; font-style: italic; }
+    .detectors { margin-top: 8px; font-size: 11px; color: var(--muted); }
+    .pred-set { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .err { color: var(--red); margin-top: 10px; font-size: 13px; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>BEET 2.0</h1>
+  <span class="sub">LLM Authorship Detection</span>
+</header>
+<main>
+  <section class="panel">
+    <label for="text">Submission text</label>
+    <textarea id="text" placeholder="Paste text to analyze..."></textarea>
+    <button id="go">Analyze</button>
+    <div id="err" class="err" hidden></div>
+  </section>
+  <section class="panel" id="result" hidden>
+    <label>Determination</label>
+    <span id="badge" class="badge">—</span>
+    <div class="gauge"><div class="fill" id="fill"></div><div class="ci" id="ci"></div></div>
+    <div class="metrics">
+      <div class="k">P(LLM)</div>        <div id="p"></div>
+      <div class="k">Confidence CI</div> <div id="ciText"></div>
+      <div class="k">Prediction set</div><div id="predSet"></div>
+    </div>
+    <div class="reason" id="reason"></div>
+    <div class="contribs">
+      <label>Top contributing signals</label>
+      <div id="contribs"></div>
+    </div>
+    <div class="detectors" id="detectors"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+$("go").addEventListener("click", async () => {
+  const text = $("text").value.trim();
+  const err = $("err");
+  const btn = $("go");
+  err.hidden = true;
+  if (!text) { err.textContent = "Enter some text."; err.hidden = false; return; }
+  btn.disabled = true; btn.textContent = "Analyzing…";
+  try {
+    const res = await fetch("/analyze", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "request failed");
+    render(data);
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+  finally { btn.disabled = false; btn.textContent = "Analyze"; }
+});
+function render(r) {
+  $("result").hidden = false;
+  const badge = $("badge");
+  badge.className = "badge " + (r.determination || "UNCERTAIN");
+  badge.textContent = r.determination;
+  const p = Number(r.p_llm || 0);
+  $("fill").style.width = (p * 100).toFixed(1) + "%";
+  const ci = r.confidence_interval || [0, 0];
+  $("ci").style.left = (ci[0] * 100).toFixed(1) + "%";
+  $("ci").style.width = ((ci[1] - ci[0]) * 100).toFixed(1) + "%";
+  $("p").textContent = p.toFixed(3);
+  $("ciText").textContent = "[" + ci[0].toFixed(2) + ", " + ci[1].toFixed(2) + "]";
+  const preds = (r.prediction_set || []).map(l => `<span class="badge ${l}">${l}</span>`).join(" ");
+  $("predSet").innerHTML = `<div class="pred-set">${preds}</div>`;
+  $("reason").textContent = r.reason || "";
+  const contribs = (r.top_features || []).map(f => {
+    const feat = f.feature || f[0];
+    const val = f.contribution != null ? f.contribution : (f[1] || 0);
+    const sign = val >= 0 ? "+" : "";
+    return `<div class="row"><div>${feat}</div><div>${sign}${Number(val).toFixed(3)}</div></div>`;
+  }).join("");
+  $("contribs").innerHTML = contribs || "<div class='k'>no contributions reported</div>";
+  $("detectors").textContent = "Detectors run: " + (r.detectors_run || []).join(", ");
+}
+</script>
+</body>
+</html>

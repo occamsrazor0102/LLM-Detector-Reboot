@@ -1,0 +1,26 @@
+_profile: production
+_extends: default
+
+fusion:
+  model_path: "/app/models/ebm_v1.pkl"
+  conformal_path: "/app/models/conformal_cal.json"
+  detector_calibration_path: "/app/models/detector_calibration.json"
+
+monitoring:
+  enabled: true
+  store_path: "/data/monitoring"
+  drift_monitoring:
+    window_size: 1000
+    kl_threshold: 0.20
+    ece_threshold: 0.15
+
+privacy:
+  raw_text_retention_days: 90
+  access_logging: true
+  vault_dir: "/data/vault"
+  contributor_anonymization_days: 365
+  external_api:
+    mode: "restricted"
+    allowed_providers:
+      - "anthropic"
+    log_all_api_calls: true

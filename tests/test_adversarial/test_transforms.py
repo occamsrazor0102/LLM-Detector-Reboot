@@ -5,7 +5,10 @@ from beet.adversarial.transforms import (
     casualize,
     synonym_swap,
     mix_human,
+    coached_casual,
+    paraphrase_launder,
 )
+from beet.adversarial.registry import get_attack, list_attacks
 
 
 class TestStripPreamble:
@@ -75,3 +78,47 @@ class TestMixHuman:
         out = mix_human("Only this.", seed=1)
         assert out.startswith("Only this.")
         assert len(out) > len("Only this.")
+
+
+class TestPromptAttacks:
+    """Prompt-based attacks require a provider; verify prompt content and errors."""
+
+    def test_coached_casual_calls_provider_with_instruction_and_text(self):
+        captured = {}
+
+        def provider(prompt: str) -> str:
+            captured["prompt"] = prompt
+            return "rewritten text"
+
+        out = coached_casual("Comprehensive analysis of widgets.", provider=provider)
+        assert out == "rewritten text"
+        assert "casual" in captured["prompt"].lower()
+        assert "Comprehensive analysis of widgets." in captured["prompt"]
+
+    def test_paraphrase_launder_calls_provider(self):
+        captured = {}
+
+        def provider(prompt: str) -> str:
+            captured["prompt"] = prompt
+            return "paraphrased"
+
+        out = paraphrase_launder("Original sentence here.", provider=provider)
+        assert out == "paraphrased"
+        assert "paraphrase" in captured["prompt"].lower()
+        assert "Original sentence here." in captured["prompt"]
+
+    def test_coached_casual_requires_provider(self):
+        with pytest.raises(RuntimeError):
+            coached_casual("anything")
+
+    def test_paraphrase_launder_requires_provider(self):
+        with pytest.raises(RuntimeError):
+            paraphrase_launder("anything")
+
+    def test_prompt_attacks_registered(self):
+        assert get_attack("coached_casual") is not None
+        assert get_attack("coached_casual").category == "prompt"
+        assert get_attack("paraphrase_launder") is not None
+        assert get_attack("paraphrase_launder").category == "prompt"
+        names = {a.name for a in list_attacks(category="prompt")}
+        assert {"coached_casual", "paraphrase_launder"}.issubset(names)

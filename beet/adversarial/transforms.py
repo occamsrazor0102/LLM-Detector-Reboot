@@ -1,11 +1,14 @@
 """Programmatic post-processing adversarial transforms.
 
-Each transform is a pure function: str -> str. No API calls, no side effects.
+Each `transform`-category attack is a pure function: str -> str, no API calls.
+`prompt`-category attacks require a `provider` callable (str -> str) injected by
+the harness; they re-generate content via an LLM.
 """
 from __future__ import annotations
 
 import random
 import re
+from typing import Callable
 
 from beet.adversarial.registry import Attack, register
 
@@ -128,6 +131,39 @@ def mix_human(text: str, *, seed: int | None = None, **_: object) -> str:
     return " ".join(sentences)
 
 
+_COACHED_CASUAL_PROMPT = (
+    "Rewrite the following text in a casual, conversational tone. "
+    "Include occasional typos and informal language. "
+    "Avoid numbered lists, bullet points, and words like 'ensure', "
+    "'comprehensive', 'robust', or 'facilitate'. "
+    "Make it sound like a real person wrote it quickly.\n\n"
+)
+
+_PARAPHRASE_LAUNDER_PROMPT = (
+    "Paraphrase the following text completely. Use different sentence "
+    "structures, vocabulary, and phrasing while preserving the meaning. "
+    "Do not add any preamble.\n\n"
+)
+
+
+def coached_casual(
+    text: str, *, provider: Callable[[str], str] | None = None, **_: object
+) -> str:
+    """Re-generate via LLM provider with casual-tone coaching prompt."""
+    if provider is None:
+        raise RuntimeError("coached_casual attack requires a 'provider' callable")
+    return provider(_COACHED_CASUAL_PROMPT + text)
+
+
+def paraphrase_launder(
+    text: str, *, provider: Callable[[str], str] | None = None, **_: object
+) -> str:
+    """Re-generate via LLM provider with paraphrase instruction."""
+    if provider is None:
+        raise RuntimeError("paraphrase_launder attack requires a 'provider' callable")
+    return provider(_PARAPHRASE_LAUNDER_PROMPT + text)
+
+
 # Register all transforms
 register(Attack(
     name="strip_preamble",
@@ -163,4 +199,18 @@ register(Attack(
     description="Splice human-style sentences into LLM text",
     severity="advanced",
     apply=mix_human,
+))
+register(Attack(
+    name="coached_casual",
+    category="prompt",
+    description="LLM re-generates with casual tone coaching",
+    severity="moderate",
+    apply=coached_casual,
+))
+register(Attack(
+    name="paraphrase_launder",
+    category="prompt",
+    description="LLM paraphrases to strip stylistic fingerprints",
+    severity="advanced",
+    apply=paraphrase_launder,
 ))

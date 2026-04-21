@@ -1,0 +1,15 @@
+services:
+  beet:
+    build: .
+    image: beet:2.0.0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+      - beet-data:/data
+    environment:
+      - BEET_CONFIG=/app/configs/production.yaml
+    restart: unless-stopped
+
+volumes:
+  beet-data:

@@ -17,6 +17,8 @@ from beet.evaluation.metrics import (
 )
 from beet.evaluation.runner import EvalReport, run_eval
 from beet.evaluation.ablation import AblationReport, run_ablation, verdict_for
+from beet.evaluation.robustness import RobustnessReport, run_robustness_eval
+from beet.evaluation.fairness import FairnessReport, run_fairness_eval
 
 __all__ = [
     "EvalSample",
@@ -36,4 +38,8 @@ __all__ = [
     "AblationReport",
     "run_ablation",
     "verdict_for",
+    "RobustnessReport",
+    "run_robustness_eval",
+    "FairnessReport",
+    "run_fairness_eval",
 ]

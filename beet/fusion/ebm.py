@@ -85,10 +85,15 @@ except ImportError:
 class EBMFusion:
     """Fusion using a trained EBM. Falls back to naive fusion if untrained."""
 
-    def __init__(self, model: Any = None):
+    def __init__(self, model: Any = None, conformal: Any = None):
         self._model = model
+        self._conformal = conformal
         self._assembler = FeatureAssembler()
         self._feature_names: list[str] | None = None
+        if model is not None:
+            names = getattr(model, "_beet_feature_names", None)
+            if names:
+                self._feature_names = list(names)
 
     def fuse(self, layer_results: list[LayerResult], word_count: int = 0, domain: str = "prose") -> FusionResult:
         if self._model is None:
@@ -115,7 +120,10 @@ class EBMFusion:
             top = []
 
         ci = (max(0.0, p_llm - 0.10), min(1.0, p_llm + 0.10))
-        prediction_set = _p_llm_to_labels(p_llm, 0.10)
+        if self._conformal is not None:
+            prediction_set = self._conformal.predict_set(p_llm)
+        else:
+            prediction_set = _p_llm_to_labels(p_llm, 0.10)
         return FusionResult(p_llm=p_llm, confidence_interval=ci,
                             prediction_set=prediction_set,
                             feature_contributions=contribs, top_contributors=top)
@@ -132,10 +140,14 @@ class EBMFusion:
         spread = max(r.p_llm for r in active) - min(r.p_llm for r in active)
         hw = max(0.05, spread / 2)
         ci = (max(0.0, p_llm - hw), min(1.0, p_llm + hw))
-        contribs = {r.layer_id: r.p_llm for r in active}
-        top = sorted(contribs.items(), key=lambda x: abs(x[1] - 0.5), reverse=True)[:5]
+        contribs = {r.layer_id: (r.p_llm - 0.5) * r.confidence for r in active}
+        top = sorted(contribs.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
+        if self._conformal is not None:
+            prediction_set = self._conformal.predict_set(p_llm)
+        else:
+            prediction_set = _p_llm_to_labels(p_llm, hw)
         return FusionResult(p_llm=p_llm, confidence_interval=ci,
-                            prediction_set=_p_llm_to_labels(p_llm, hw),
+                            prediction_set=prediction_set,
                             feature_contributions=contribs, top_contributors=top)
 
 

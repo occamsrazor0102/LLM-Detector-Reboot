@@ -70,6 +70,25 @@ def test_ebm_fusion_trained_produces_result():
     assert fr.p_llm > 0.5  # should be suspicious
 
 
+def test_naive_fusion_contributions_are_signed_and_weighted():
+    """Naive fusion reports (p_llm - 0.5) * confidence as contribution."""
+    fusion = EBMFusion()
+    neutral = _make_layer_result("preamble", 0.5)
+    r = fusion.fuse([neutral], word_count=100, domain="prose")
+    assert abs(r.feature_contributions["preamble"]) < 1e-9
+
+    strong = LayerResult(
+        layer_id="fingerprint_vocab", domain="universal",
+        raw_score=0.9, p_llm=0.9, confidence=0.8,
+        signals={}, determination="AMBER",
+        attacker_tiers=["A0"], compute_cost="cheap", min_text_length=0,
+    )
+    r2 = fusion.fuse([strong], word_count=100, domain="prose")
+    assert r2.feature_contributions["fingerprint_vocab"] > 0
+    # (0.9 - 0.5) * 0.8 = 0.32
+    assert abs(r2.feature_contributions["fingerprint_vocab"] - 0.32) < 1e-9
+
+
 def test_conformal_wrapper():
     # Calibrate with 20 examples
     cal_scores = np.array([0.1, 0.2, 0.15, 0.05, 0.3, 0.25, 0.8, 0.7, 0.9, 0.85,

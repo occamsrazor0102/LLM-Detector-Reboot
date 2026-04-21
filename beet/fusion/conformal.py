@@ -3,8 +3,10 @@
 Conformal prediction wrapper.
 Produces valid prediction sets at user-specified error rate alpha.
 """
+import json
+from pathlib import Path
+
 import numpy as np
-from typing import Literal
 
 
 class ConformalWrapper:
@@ -55,3 +57,13 @@ class ConformalWrapper:
                 labels.append(label)
 
         return labels if labels else ["UNCERTAIN"]
+
+    def save(self, path: Path) -> None:
+        if self._threshold is None:
+            raise RuntimeError("ConformalWrapper.save: not calibrated")
+        Path(path).write_text(json.dumps({"alpha": self._alpha, "threshold": self._threshold}))
+
+    def load(self, path: Path) -> None:
+        data = json.loads(Path(path).read_text())
+        self._alpha = float(data["alpha"])
+        self._threshold = float(data["threshold"])

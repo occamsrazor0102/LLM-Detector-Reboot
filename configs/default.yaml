@@ -60,6 +60,16 @@ cascade:
   phase2_short_circuit_low: 0.15
   phase3_always_run: false
 
+fusion:
+  # Path to a trained EBM model (produced by scripts/train_fusion.py).
+  # When null or missing, the pipeline falls back to naive fusion.
+  model_path: null
+  # Path to conformal calibration JSON (produced by scripts/calibrate_conformal.py).
+  # When null or missing, prediction sets use the naive uncertainty heuristic.
+  conformal_path: null
+  # Path to per-detector isotonic calibration JSON (scripts/calibrate_detectors.py).
+  detector_calibration_path: null
+
 decision:
   red_threshold: 0.75
   amber_threshold: 0.50
