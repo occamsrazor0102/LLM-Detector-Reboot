@@ -98,3 +98,9 @@ router:
     prompt: 30
     prose: 150
     mixed: 300
+
+gui:
+  history:
+    enabled: true
+    db_path: data/beet_history.sqlite3
+    retain_text: true

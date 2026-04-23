@@ -8,9 +8,11 @@
     :root {
       --bg: #0e1116;
       --panel: #161b22;
+      --panel2: #0b0f14;
       --ink: #e6edf3;
       --muted: #8b949e;
       --line: #30363d;
+      --accent: #1f6feb;
       --red: #d1495b;
       --amber: #e4a33a;
       --yellow: #dbcd53;
@@ -21,23 +23,49 @@
       margin: 0; padding: 0; background: var(--bg); color: var(--ink);
       font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+    header {
+      padding: 12px 24px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 16px;
+    }
     header h1 { font-size: 16px; margin: 0; font-weight: 600; }
     header .sub { color: var(--muted); font-size: 12px; }
-    main { display: grid; grid-template-columns: 1fr 420px; gap: 16px; padding: 16px 24px; max-width: 1400px; }
+    header .mode { margin-left: auto; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    nav.tabs {
+      display: flex; gap: 2px; padding: 0 24px; border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    nav.tabs button {
+      background: transparent; border: 0; color: var(--muted);
+      padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+      border-bottom: 2px solid transparent; margin: 0;
+    }
+    nav.tabs button:hover { color: var(--ink); }
+    nav.tabs button[aria-selected="true"] {
+      color: var(--ink); border-bottom-color: var(--accent);
+    }
+    main { max-width: 1400px; padding: 16px 24px; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .view-analyze { display: grid; grid-template-columns: 1fr 420px; gap: 16px; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
     label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     textarea {
-      width: 100%; box-sizing: border-box; min-height: 320px; background: #0b0f14;
+      width: 100%; box-sizing: border-box; min-height: 280px; background: var(--panel2);
       border: 1px solid var(--line); color: var(--ink); border-radius: 4px; padding: 12px;
       font: 13px/1.45 ui-monospace, Menlo, "Consolas", monospace; resize: vertical;
     }
     button {
-      background: #1f6feb; color: white; border: 0; padding: 9px 16px; border-radius: 5px;
-      font-weight: 600; cursor: pointer; margin-top: 10px;
+      background: var(--accent); color: white; border: 0; padding: 9px 16px; border-radius: 5px;
+      font-weight: 600; cursor: pointer;
     }
     button:hover { background: #1a5ac7; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost {
+      background: transparent; border: 1px solid var(--line); color: var(--ink);
+    }
+    button.ghost:hover { border-color: var(--accent); background: var(--panel2); }
+    .actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
     .badge {
       display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: 700;
       letter-spacing: 0.05em; font-size: 13px;
@@ -47,9 +75,8 @@
     .YELLOW { background: var(--yellow); color: #2a2500; }
     .GREEN { background: var(--green); color: white; }
     .UNCERTAIN, .MIXED { background: var(--uncertain); color: white; }
-    .gauge {
-      position: relative; height: 8px; background: #21262d; border-radius: 4px; margin: 10px 0 6px;
-    }
+
+    .gauge { position: relative; height: 8px; background: #21262d; border-radius: 4px; margin: 10px 0 6px; }
     .gauge .fill { position: absolute; top: 0; left: 0; height: 100%; background: #3e8cf8; border-radius: 4px; }
     .gauge .ci { position: absolute; top: -4px; height: 16px; border-left: 1px solid #8b949e; border-right: 1px solid #8b949e; }
     .metrics { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin-top: 10px; }
@@ -61,6 +88,12 @@
     .detectors { margin-top: 8px; font-size: 11px; color: var(--muted); }
     .pred-set { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
     .err { color: var(--red); margin-top: 10px; font-size: 13px; }
+    .notice {
+      background: var(--panel2); border: 1px solid var(--line); border-radius: 4px;
+      padding: 8px 12px; font-size: 12px; color: var(--muted); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .notice .ink { color: var(--ink); }
     .feedback { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
     .feedback .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .feedback button.fb {
@@ -68,43 +101,44 @@
       padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;
       cursor: pointer; margin-top: 0;
     }
-    .feedback button.fb:hover { border-color: #1f6feb; }
+    .feedback button.fb:hover { border-color: var(--accent); }
     .feedback button.fb.human { color: var(--green); }
     .feedback button.fb.llm { color: var(--red); }
     .feedback input {
-      flex: 1 1 180px; min-width: 0; background: #0b0f14;
+      flex: 1 1 180px; min-width: 0; background: var(--panel2);
       border: 1px solid var(--line); color: var(--ink); border-radius: 4px;
       padding: 6px 8px; font-size: 12px;
     }
     .feedback .status { color: var(--muted); font-size: 12px; min-height: 16px; }
     .feedback .status.ok { color: var(--green); }
     .feedback .status.err { color: var(--red); }
+
     details.section { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
     details.section > summary {
       cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase;
       letter-spacing: 0.04em; list-style: none; user-select: none;
     }
     details.section > summary::-webkit-details-marker { display: none; }
-    details.section > summary::before {
-      content: "▸ "; display: inline-block; width: 14px;
-    }
+    details.section > summary::before { content: "▸ "; display: inline-block; width: 14px; }
     details.section[open] > summary::before { content: "▾ "; }
-    table.layers { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
-    table.layers th {
-      text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px;
+    table.layers, table.data { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    table.layers th, table.data th {
+      text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px;
       border-bottom: 1px solid var(--line); text-transform: none; letter-spacing: 0;
+      position: sticky; top: 0; background: var(--panel);
     }
-    table.layers td {
-      padding: 4px 6px; border-bottom: 1px dashed var(--line); font-family: ui-monospace, Menlo, Consolas, monospace;
+    table.layers td, table.data td {
+      padding: 6px 8px; border-bottom: 1px dashed var(--line);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
     }
-    table.layers tr.row { cursor: pointer; }
-    table.layers tr.row:hover td { background: #0b0f14; }
+    table.layers tr.row, table.data tr.row { cursor: pointer; }
+    table.layers tr.row:hover td, table.data tr.row:hover td { background: var(--panel2); }
     table.layers tr.sig td {
       font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
-      color: var(--muted); background: #0b0f14; padding: 8px 12px; white-space: pre-wrap;
+      color: var(--muted); background: var(--panel2); padding: 8px 12px; white-space: pre-wrap;
       word-break: break-word;
     }
-    table.layers .badge { font-size: 11px; padding: 2px 6px; }
+    table.layers .badge, table.data .badge { font-size: 11px; padding: 2px 6px; }
     .contrib-row {
       display: grid; grid-template-columns: 160px 1fr 56px; gap: 8px; align-items: center;
       padding: 2px 0; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -113,7 +147,7 @@
     .contrib-row .bar { height: 6px; background: #21262d; border-radius: 3px; position: relative; }
     .contrib-row .bar .fill { position: absolute; top: 0; height: 100%; border-radius: 3px; }
     .contrib-row .bar .fill.pos { background: #3e8cf8; left: 50%; }
-    .contrib-row .bar .fill.neg { background: #d1495b; right: 50%; }
+    .contrib-row .bar .fill.neg { background: var(--red); right: 50%; }
     .contrib-row .bar .axis { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: var(--line); }
     .contrib-row .val { text-align: right; color: var(--muted); }
     .sort-controls { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
@@ -122,91 +156,249 @@
       padding: 3px 8px; font-size: 11px; border-radius: 3px; cursor: pointer; margin: 0;
       font-weight: normal;
     }
-    .sort-controls button.active { color: var(--ink); border-color: #1f6feb; }
-    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+    .sort-controls button.active { color: var(--ink); border-color: var(--accent); }
+
+    .filter-bar {
+      display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+      padding: 12px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 6px; margin-bottom: 12px;
+    }
+    .filter-bar .group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-bar label { margin: 0; }
+    .filter-bar input[type="date"], .filter-bar input[type="text"], .filter-bar input[type="number"] {
+      background: var(--panel2); border: 1px solid var(--line); color: var(--ink);
+      border-radius: 4px; padding: 6px 8px; font-size: 12px;
+    }
+    .check-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .check-group label {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+      color: var(--muted); margin: 0; text-transform: none; letter-spacing: 0;
+      cursor: pointer; padding: 3px 6px; border: 1px solid var(--line); border-radius: 3px;
+    }
+    .check-group label.on { color: var(--ink); border-color: var(--accent); }
+    .check-group input { display: none; }
+
+    .pagination {
+      display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 12px;
+      color: var(--muted);
+    }
+    .pagination button { padding: 4px 10px; font-size: 12px; }
+
+    .batch-tabs { display: flex; gap: 2px; margin-bottom: 8px; }
+    .batch-tabs button {
+      background: transparent; border: 1px solid var(--line); color: var(--muted);
+      padding: 5px 12px; font-size: 12px; border-radius: 4px 4px 0 0; cursor: pointer;
+    }
+    .batch-tabs button.active { color: var(--ink); border-color: var(--accent); border-bottom-color: transparent; }
+    .batch-input { display: none; }
+    .batch-input.active { display: block; }
+    .drop-zone {
+      border: 2px dashed var(--line); border-radius: 6px; padding: 32px;
+      text-align: center; color: var(--muted); cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--panel2); }
+    .batch-summary {
+      display: flex; gap: 16px; font-size: 12px; color: var(--muted);
+      padding: 8px 0; border-bottom: 1px solid var(--line); margin-top: 12px;
+    }
+    .batch-summary strong { color: var(--ink); }
+
+    .empty { padding: 32px; text-align: center; color: var(--muted); }
+
+    @media (max-width: 900px) {
+      .view-analyze { grid-template-columns: 1fr; }
+      main { padding: 12px; }
+    }
   </style>
 </head>
 <body>
 <header>
   <h1>BEET 2.0</h1>
   <span class="sub">LLM Authorship Detection</span>
+  <span class="mode" id="modeIndicator"></span>
 </header>
+<nav class="tabs" role="tablist">
+  <button data-tab="analyze" aria-selected="true">Analyze</button>
+  <button data-tab="batch">Batch</button>
+  <button data-tab="history">History</button>
+</nav>
 <main>
-  <section class="panel">
-    <label for="text">Submission text</label>
-    <textarea id="text" placeholder="Paste text to analyze..."></textarea>
-    <button id="go">Analyze</button>
-    <div id="err" class="err" hidden></div>
+
+  <section class="view active" id="view-analyze">
+    <div class="view-analyze">
+      <section class="panel">
+        <div class="notice" id="historyBanner" hidden>
+          Viewing submission <span class="ink" id="historyBannerId"></span> from history.
+          <button class="ghost" id="historyBannerClear" style="margin-left:auto;padding:4px 10px;font-size:12px;">New analysis</button>
+        </div>
+        <label for="text">Submission text</label>
+        <textarea id="text" placeholder="Paste text to analyze..."></textarea>
+        <div class="actions">
+          <button id="go">Analyze</button>
+          <button class="ghost" id="rerun" hidden>Re-run</button>
+        </div>
+        <div id="err" class="err" hidden></div>
+      </section>
+      <section class="panel" id="result" hidden>
+        <label>Determination</label>
+        <span id="badge" class="badge">—</span>
+        <div class="gauge"><div class="fill" id="fill"></div><div class="ci" id="ci"></div></div>
+        <div class="metrics">
+          <div class="k">P(LLM)</div>        <div id="p"></div>
+          <div class="k">Confidence CI</div> <div id="ciText"></div>
+          <div class="k">Prediction set</div><div id="predSet"></div>
+        </div>
+        <div class="reason" id="reason"></div>
+        <div class="contribs">
+          <label>Top contributing signals</label>
+          <div id="contribs"></div>
+        </div>
+        <details class="section" id="layersSection">
+          <summary>Detector breakdown</summary>
+          <table class="layers"><thead><tr>
+            <th>id</th><th>domain</th><th style="text-align:right">raw</th>
+            <th style="text-align:right">p(llm)</th><th style="text-align:right">conf</th>
+            <th>verdict</th>
+          </tr></thead><tbody id="layersBody"></tbody></table>
+        </details>
+        <details class="section" id="allContribsSection">
+          <summary>All feature contributions</summary>
+          <div class="sort-controls" id="sortControls">
+            <button data-sort="abs" class="active">|value| ↓</button>
+            <button data-sort="desc">value ↓</button>
+            <button data-sort="asc">value ↑</button>
+            <button data-sort="alpha">a–z</button>
+          </div>
+          <div id="allContribs"></div>
+        </details>
+        <div class="detectors" id="detectors"></div>
+        <div class="feedback" id="feedback" hidden>
+          <label>Reviewer feedback</label>
+          <div class="row">
+            <button class="fb human" id="fbHuman" title="Confirm this submission is human-written">Human</button>
+            <button class="fb llm" id="fbLLM" title="Confirm this submission is LLM-generated">LLM</button>
+            <input id="fbNotes" placeholder="Optional notes…" />
+          </div>
+          <div class="status" id="fbStatus"></div>
+        </div>
+      </section>
+    </div>
   </section>
-  <section class="panel" id="result" hidden>
-    <label>Determination</label>
-    <span id="badge" class="badge">—</span>
-    <div class="gauge"><div class="fill" id="fill"></div><div class="ci" id="ci"></div></div>
-    <div class="metrics">
-      <div class="k">P(LLM)</div>        <div id="p"></div>
-      <div class="k">Confidence CI</div> <div id="ciText"></div>
-      <div class="k">Prediction set</div><div id="predSet"></div>
-    </div>
-    <div class="reason" id="reason"></div>
-    <div class="contribs">
-      <label>Top contributing signals</label>
-      <div id="contribs"></div>
-    </div>
-    <details class="section" id="layersSection">
-      <summary>Detector breakdown</summary>
-      <table class="layers"><thead><tr>
-        <th>id</th><th>domain</th><th style="text-align:right">raw</th>
-        <th style="text-align:right">p(llm)</th><th style="text-align:right">conf</th>
-        <th>verdict</th>
-      </tr></thead><tbody id="layersBody"></tbody></table>
-    </details>
-    <details class="section" id="allContribsSection">
-      <summary>All feature contributions</summary>
-      <div class="sort-controls" id="sortControls">
-        <button data-sort="abs" class="active">|value| ↓</button>
-        <button data-sort="desc">value ↓</button>
-        <button data-sort="asc">value ↑</button>
-        <button data-sort="alpha">a–z</button>
+
+  <section class="view" id="view-batch">
+    <div class="panel">
+      <label>Batch input</label>
+      <div class="batch-tabs" role="tablist">
+        <button data-binput="lines" class="active">One per line</button>
+        <button data-binput="json">JSON</button>
+        <button data-binput="file">File upload</button>
       </div>
-      <div id="allContribs"></div>
-    </details>
-    <div class="detectors" id="detectors"></div>
-    <div class="feedback" id="feedback" hidden>
-      <label>Reviewer feedback</label>
-      <div class="row">
-        <button class="fb human" id="fbHuman" title="Confirm this submission is human-written">Human</button>
-        <button class="fb llm" id="fbLLM" title="Confirm this submission is LLM-generated">LLM</button>
-        <input id="fbNotes" placeholder="Optional notes…" />
+      <div class="batch-input active" data-binput="lines">
+        <textarea id="batchLines" placeholder="One submission per line..."></textarea>
       </div>
-      <div class="status" id="fbStatus"></div>
+      <div class="batch-input" data-binput="json">
+        <textarea id="batchJson" placeholder='[{"id":"s1","text":"..."}, {"id":"s2","text":"..."}]'></textarea>
+      </div>
+      <div class="batch-input" data-binput="file">
+        <div class="drop-zone" id="batchDrop">
+          Drop a .txt, .json, or .csv file here, or click to choose
+          <input type="file" id="batchFile" accept=".txt,.json,.csv" style="display:none">
+        </div>
+        <div style="margin-top:8px;color:var(--muted);font-size:12px;" id="batchFileStatus"></div>
+      </div>
+      <div class="actions">
+        <button id="batchGo">Run batch</button>
+        <button class="ghost" id="batchExportJson" hidden>Export JSON</button>
+        <button class="ghost" id="batchExportCsv" hidden>Export CSV</button>
+      </div>
+      <div id="batchErr" class="err" hidden></div>
+      <div class="batch-summary" id="batchSummary" hidden></div>
+      <table class="data" id="batchTable" hidden>
+        <thead><tr>
+          <th>#</th><th>id</th><th>determination</th>
+          <th style="text-align:right">p(llm)</th><th style="text-align:right">detectors</th>
+        </tr></thead>
+        <tbody id="batchBody"></tbody>
+      </table>
     </div>
   </section>
+
+  <section class="view" id="view-history">
+    <div class="filter-bar">
+      <div class="group">
+        <label>Determination</label>
+        <div class="check-group" id="histDeterm">
+          <label><input type="checkbox" value="RED"><span class="badge RED">RED</span></label>
+          <label><input type="checkbox" value="AMBER"><span class="badge AMBER">AMBER</span></label>
+          <label><input type="checkbox" value="YELLOW"><span class="badge YELLOW">YELLOW</span></label>
+          <label><input type="checkbox" value="GREEN"><span class="badge GREEN">GREEN</span></label>
+          <label><input type="checkbox" value="UNCERTAIN"><span class="badge UNCERTAIN">UNCERTAIN</span></label>
+          <label><input type="checkbox" value="MIXED"><span class="badge MIXED">MIXED</span></label>
+        </div>
+      </div>
+      <div class="group">
+        <label>Since</label>
+        <input type="date" id="histSince">
+      </div>
+      <div class="group">
+        <label>Until</label>
+        <input type="date" id="histUntil">
+      </div>
+      <div class="group" style="flex:1 1 200px;">
+        <label>Search (id or text)</label>
+        <input type="text" id="histSearch" placeholder="submission id or text fragment">
+      </div>
+      <div class="actions" style="margin:0;">
+        <button id="histApply">Apply</button>
+        <button class="ghost" id="histReset">Reset</button>
+        <button class="ghost" id="histExportJson">Export JSON</button>
+        <button class="ghost" id="histExportCsv">Export CSV</button>
+      </div>
+    </div>
+    <div class="panel" style="padding:0;">
+      <div id="histError" class="err" style="padding:12px 16px" hidden></div>
+      <table class="data" id="histTable">
+        <thead><tr>
+          <th>recorded_at</th><th>determination</th>
+          <th style="text-align:right">p(llm)</th>
+          <th>source</th><th>feedback</th><th>id</th>
+        </tr></thead>
+        <tbody id="histBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+      <div class="pagination">
+        <button class="ghost" id="histPrev">Prev</button>
+        <span id="histPageInfo">–</span>
+        <button class="ghost" id="histNext">Next</button>
+      </div>
+    </div>
+  </section>
+
 </main>
+
 <script>
 const $ = (id) => document.getElementById(id);
 
-// beetApi: dual-mode client. Uses Tauri invoke() when running inside the
-// Tauri shell (detected via window.__TAURI_INTERNALS__), otherwise falls back
-// to fetch() against the local HTTP server. Same call shape for both.
+/* ---------------- dual-mode API client ---------------- */
 const beetApi = (() => {
   const isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
   if (isTauri) {
     const invoke = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke)
       || (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
-    if (typeof invoke !== "function") {
-      throw new Error("Tauri detected but invoke() is unavailable");
-    }
+    if (typeof invoke !== "function") throw new Error("Tauri detected but invoke() unavailable");
     return {
       mode: "tauri",
       analyze: (text, submission_id) => invoke("analyze", { text, submissionId: submission_id || null }),
-      analyzeBatch: (items) => invoke("analyze_batch", { items }),
-      feedback: (payload) => invoke("feedback", {
-        text: payload.text,
-        confirmedLabel: payload.confirmed_label,
-        submissionId: payload.submission_id || null,
-        reviewerNotes: payload.reviewer_notes || null,
+      analyzeBatch: (items, batch_id) => invoke("analyze_batch", { items }),
+      feedback: (p) => invoke("feedback", {
+        text: p.text, confirmedLabel: p.confirmed_label,
+        submissionId: p.submission_id || null, reviewerNotes: p.reviewer_notes || null,
       }),
       health: () => invoke("health"),
+      historyList: (params) => invoke("history_list", { params }),
+      historyGet: (id) => invoke("history_get", { submissionId: id }),
+      historyDelete: (id) => invoke("history_delete", { submissionId: id }),
+      historyExport: (params) => invoke("history_export", { params }),
     };
   }
   const post = async (path, body) => {
@@ -221,13 +413,46 @@ const beetApi = (() => {
   return {
     mode: "http",
     analyze: (text, submission_id) => post("/analyze", { text, submission_id }),
-    analyzeBatch: (items) => post("/batch", { items }),
-    feedback: (payload) => post("/feedback", payload),
+    analyzeBatch: (items, batch_id) => post("/batch", { items, batch_id }),
+    feedback: (p) => post("/feedback", p),
     health: () => fetch("/health").then(r => r.json()),
+    historyList: (params) => post("/history/list", params),
+    historyGet: (id) => post("/history/get", { submission_id: id }),
+    historyDelete: (id) => post("/history/delete", { submission_id: id }),
+    historyExport: (params) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params || {})) {
+        if (v == null || v === "") continue;
+        if (Array.isArray(v)) v.forEach(x => q.append(k, x)); else q.append(k, v);
+      }
+      return { mode: "download", url: "/history/export?" + q.toString() };
+    },
   };
 })();
+$("modeIndicator").textContent = beetApi.mode;
 
-let lastAnalysis = null;  // {text, submission_id} — captured at analyze() so feedback can echo it back
+/* ---------------- tab routing ---------------- */
+const VIEWS = ["analyze", "batch", "history"];
+function showTab(name) {
+  if (!VIEWS.includes(name)) name = "analyze";
+  VIEWS.forEach(v => {
+    $("view-" + v).classList.toggle("active", v === name);
+  });
+  document.querySelectorAll("nav.tabs button").forEach(b => {
+    b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
+  });
+  if (location.hash.slice(2) !== name) location.hash = "#/" + name;
+  if (name === "history") loadHistory();
+}
+document.querySelectorAll("nav.tabs button").forEach(b => {
+  b.addEventListener("click", () => showTab(b.dataset.tab));
+});
+window.addEventListener("hashchange", () => showTab(location.hash.slice(2) || "analyze"));
+showTab(location.hash.slice(2) || "analyze");
+
+/* ---------------- Analyze tab ---------------- */
+let lastAnalysis = null;
+let viewingHistoryId = null;
 
 $("go").addEventListener("click", async () => {
   const text = $("text").value.trim();
@@ -237,39 +462,53 @@ $("go").addEventListener("click", async () => {
   if (!text) { err.textContent = "Enter some text."; err.hidden = false; return; }
   btn.disabled = true; btn.textContent = "Analyzing…";
   try {
+    clearHistoryBanner();
     const data = await beetApi.analyze(text);
     lastAnalysis = { text, submission_id: data.submission_id || "" };
     render(data);
     $("feedback").hidden = false;
-    $("fbStatus").textContent = "";
-    $("fbStatus").className = "status";
+    $("fbStatus").textContent = ""; $("fbStatus").className = "status";
     $("fbNotes").value = "";
   } catch (e) { err.textContent = e.message || String(e); err.hidden = false; }
   finally { btn.disabled = false; btn.textContent = "Analyze"; }
 });
 
+$("rerun").addEventListener("click", () => {
+  viewingHistoryId = null;
+  $("historyBanner").hidden = true;
+  $("rerun").hidden = true;
+  $("go").click();
+});
+
+$("historyBannerClear").addEventListener("click", () => {
+  clearHistoryBanner();
+  $("text").value = "";
+  $("result").hidden = true;
+});
+
+function clearHistoryBanner() {
+  viewingHistoryId = null;
+  $("historyBanner").hidden = true;
+  $("rerun").hidden = true;
+}
+
 async function submitFeedback(label) {
   if (!lastAnalysis) return;
   const status = $("fbStatus");
-  status.className = "status";
-  status.textContent = "Submitting…";
+  status.className = "status"; status.textContent = "Submitting…";
   const [h, l] = [$("fbHuman"), $("fbLLM")];
   h.disabled = true; l.disabled = true;
   try {
     await beetApi.feedback({
-      text: lastAnalysis.text,
-      confirmed_label: label,
+      text: lastAnalysis.text, confirmed_label: label,
       submission_id: lastAnalysis.submission_id,
       reviewer_notes: $("fbNotes").value.trim() || null,
     });
     status.className = "status ok";
     status.textContent = `Recorded as ${label === 1 ? "LLM" : "human"}.`;
   } catch (e) {
-    status.className = "status err";
-    status.textContent = e.message || String(e);
-  } finally {
-    h.disabled = false; l.disabled = false;
-  }
+    status.className = "status err"; status.textContent = e.message || String(e);
+  } finally { h.disabled = false; l.disabled = false; }
 }
 $("fbHuman").addEventListener("click", () => submitFeedback(0));
 $("fbLLM").addEventListener("click", () => submitFeedback(1));
@@ -293,7 +532,7 @@ function render(r) {
     const feat = f.feature || f[0];
     const val = f.contribution != null ? f.contribution : (f[1] || 0);
     const sign = val >= 0 ? "+" : "";
-    return `<div class="row"><div>${feat}</div><div>${sign}${Number(val).toFixed(3)}</div></div>`;
+    return `<div class="row"><div>${escapeHtml(feat)}</div><div>${sign}${Number(val).toFixed(3)}</div></div>`;
   }).join("");
   $("contribs").innerHTML = contribs || "<div class='k'>no contributions reported</div>";
   $("detectors").textContent = "Detectors run: " + (r.detectors_run || []).join(", ");
@@ -306,7 +545,6 @@ function escapeHtml(s) {
     "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
   })[c]);
 }
-
 function formatSignal(v) {
   if (v === null || v === undefined) return String(v);
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(4);
@@ -324,8 +562,7 @@ function renderLayers(layers) {
     const verdict = l.determination || "UNCERTAIN";
     const sig = l.signals || {};
     const sigRows = Object.keys(sig).length
-      ? Object.entries(sig).map(([k, v]) =>
-          `${escapeHtml(k)}: ${escapeHtml(formatSignal(v))}`).join("\n")
+      ? Object.entries(sig).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(formatSignal(v))}`).join("\n")
       : "(no signals)";
     return `
       <tr class="row" data-idx="${i}">
@@ -348,24 +585,17 @@ function renderLayers(layers) {
   });
 }
 
-let _contribs = {};
-let _sortMode = "abs";
-function renderAllContribs(contribs) {
-  _contribs = contribs || {};
-  paintContribs();
-}
+let _contribs = {}, _sortMode = "abs";
+function renderAllContribs(contribs) { _contribs = contribs || {}; paintContribs(); }
 function paintContribs() {
   const entries = Object.entries(_contribs);
   const container = $("allContribs");
-  if (!entries.length) {
-    container.innerHTML = "<div class='k'>no contributions reported</div>";
-    return;
-  }
+  if (!entries.length) { container.innerHTML = "<div class='k'>no contributions reported</div>"; return; }
   const sorters = {
-    abs: (a, b) => Math.abs(b[1]) - Math.abs(a[1]),
+    abs:  (a, b) => Math.abs(b[1]) - Math.abs(a[1]),
     desc: (a, b) => b[1] - a[1],
-    asc: (a, b) => a[1] - b[1],
-    alpha: (a, b) => a[0].localeCompare(b[0]),
+    asc:  (a, b) => a[1] - b[1],
+    alpha:(a, b) => a[0].localeCompare(b[0]),
   };
   entries.sort(sorters[_sortMode] || sorters.abs);
   const maxAbs = Math.max(...entries.map(([, v]) => Math.abs(v)), 1e-9);
@@ -380,13 +610,247 @@ function paintContribs() {
     </div>`;
   }).join("");
 }
-document.getElementById("sortControls").addEventListener("click", (e) => {
+$("sortControls").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-sort]");
   if (!btn) return;
   _sortMode = btn.dataset.sort;
   document.querySelectorAll("#sortControls button").forEach(b => b.classList.toggle("active", b === btn));
   paintContribs();
 });
+
+/* ---------------- Batch tab ---------------- */
+document.querySelectorAll(".batch-tabs button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".batch-tabs button").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll(".batch-input").forEach(x => x.classList.toggle("active", x.dataset.binput === b.dataset.binput));
+  });
+});
+
+let _batchResults = [];
+let _batchId = null;
+
+function parseLines(s) {
+  return s.split("\n").map(l => l.trim()).filter(Boolean).map((text, i) => ({ id: `line_${i+1}`, text }));
+}
+function parseJsonInput(s) {
+  const data = JSON.parse(s);
+  if (!Array.isArray(data)) throw new Error("expected a JSON array");
+  return data.map((it, i) => {
+    if (typeof it === "string") return { id: `item_${i+1}`, text: it };
+    if (it && typeof it === "object") return { id: String(it.id || `item_${i+1}`), text: String(it.text || "") };
+    throw new Error(`item ${i} is not a string or object`);
+  });
+}
+function parseCsv(s) {
+  const lines = s.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  const hdr = lines[0].split(",").map(h => h.trim().toLowerCase());
+  const hasHeader = hdr.includes("text");
+  const startAt = hasHeader ? 1 : 0;
+  const idIdx = hasHeader ? hdr.indexOf("id") : -1;
+  const textIdx = hasHeader ? hdr.indexOf("text") : (lines[0].includes(",") ? 1 : 0);
+  const items = [];
+  for (let i = startAt; i < lines.length; i++) {
+    // naive CSV: does not handle quoted commas. Good enough for v0.
+    const cols = lines[i].split(",");
+    const id = (idIdx >= 0 ? cols[idIdx] : `row_${i+1}`).trim();
+    const text = (textIdx >= 0 ? cols.slice(textIdx).join(",") : lines[i]).trim();
+    if (text) items.push({ id, text });
+  }
+  return items;
+}
+
+$("batchFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $("batchFileStatus").textContent = `Loaded: ${f.name} (${f.size} bytes)`;
+  const text = await f.text();
+  try {
+    let items;
+    if (f.name.endsWith(".json")) items = parseJsonInput(text);
+    else if (f.name.endsWith(".csv")) items = parseCsv(text);
+    else items = parseLines(text);
+    $("batchFileStatus").textContent = `Loaded ${items.length} items from ${f.name}`;
+    window._batchFileItems = items;
+  } catch (err) {
+    $("batchFileStatus").textContent = "Parse error: " + err.message;
+    window._batchFileItems = null;
+  }
+});
+$("batchDrop").addEventListener("click", () => $("batchFile").click());
+$("batchDrop").addEventListener("dragover", e => { e.preventDefault(); e.currentTarget.classList.add("dragover"); });
+$("batchDrop").addEventListener("dragleave", e => e.currentTarget.classList.remove("dragover"));
+$("batchDrop").addEventListener("drop", e => {
+  e.preventDefault(); e.currentTarget.classList.remove("dragover");
+  const f = e.dataTransfer.files[0];
+  if (f) { $("batchFile").files = e.dataTransfer.files; $("batchFile").dispatchEvent(new Event("change")); }
+});
+
+$("batchGo").addEventListener("click", async () => {
+  const err = $("batchErr");
+  err.hidden = true;
+  const activeMode = document.querySelector(".batch-tabs button.active").dataset.binput;
+  let items;
+  try {
+    if (activeMode === "lines") items = parseLines($("batchLines").value);
+    else if (activeMode === "json") items = parseJsonInput($("batchJson").value);
+    else items = window._batchFileItems || [];
+  } catch (e) { err.textContent = e.message; err.hidden = false; return; }
+  if (!items.length) { err.textContent = "No items to process."; err.hidden = false; return; }
+  if (items.length > 500) { err.textContent = `Too many items (${items.length}); cap is 500.`; err.hidden = false; return; }
+  const btn = $("batchGo");
+  btn.disabled = true; btn.textContent = `Running (${items.length})…`;
+  try {
+    const res = await beetApi.analyzeBatch(items);
+    _batchResults = res.results || [];
+    _batchId = res.batch_id || null;
+    renderBatchResults(_batchResults, res.skipped || [], items.length);
+    $("batchExportJson").hidden = false; $("batchExportCsv").hidden = false;
+  } catch (e) { err.textContent = e.message || String(e); err.hidden = false; }
+  finally { btn.disabled = false; btn.textContent = "Run batch"; }
+});
+
+function renderBatchResults(results, skipped, total) {
+  $("batchSummary").hidden = false;
+  $("batchSummary").innerHTML = `
+    <span>total: <strong>${total}</strong></span>
+    <span>analyzed: <strong>${results.length}</strong></span>
+    <span>skipped: <strong>${skipped.length}</strong></span>
+    ${_batchId ? `<span>batch_id: <strong>${escapeHtml(_batchId)}</strong></span>` : ""}
+  `;
+  $("batchTable").hidden = false;
+  $("batchBody").innerHTML = results.map((r, i) => `
+    <tr class="row" data-sid="${escapeHtml(r.submission_id)}">
+      <td>${i + 1}</td>
+      <td>${escapeHtml(r.submission_id)}</td>
+      <td><span class="badge ${r.determination}">${r.determination}</span></td>
+      <td style="text-align:right">${Number(r.p_llm).toFixed(3)}</td>
+      <td style="text-align:right">${(r.detectors_run || []).length}</td>
+    </tr>`).join("");
+  $("batchBody").querySelectorAll("tr.row").forEach(tr => {
+    tr.addEventListener("click", () => openFromHistory(tr.dataset.sid));
+  });
+}
+
+async function downloadExport(params, filename) {
+  const r = beetApi.historyExport(params);
+  if (r && r.mode === "download") {
+    const a = document.createElement("a");
+    a.href = r.url; a.download = filename || ""; document.body.appendChild(a); a.click(); a.remove();
+    return;
+  }
+  const got = await r;
+  const blob = new Blob([got.content], { type: got.mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = got.filename || filename || "export";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+$("batchExportJson").addEventListener("click", () => {
+  if (!_batchId) return;
+  downloadExport({ format: "json", batch_id: _batchId }, `batch-${_batchId}.json`);
+});
+$("batchExportCsv").addEventListener("click", () => {
+  if (!_batchId) return;
+  downloadExport({ format: "csv", batch_id: _batchId }, `batch-${_batchId}.csv`);
+});
+
+/* ---------------- History tab ---------------- */
+let _histPage = 0;
+const _histPageSize = 25;
+
+function currentHistFilter() {
+  const dets = [...document.querySelectorAll("#histDeterm input:checked")].map(i => i.value);
+  const since = $("histSince").value ? $("histSince").value + "T00:00:00Z" : null;
+  const until = $("histUntil").value ? $("histUntil").value + "T23:59:59Z" : null;
+  const search = $("histSearch").value.trim() || null;
+  return { determination: dets.length ? dets : null, since, until, search };
+}
+
+async function loadHistory() {
+  const body = $("histBody");
+  const errBox = $("histError");
+  errBox.hidden = true;
+  body.innerHTML = "<tr><td colspan='6' class='empty'>Loading…</td></tr>";
+  const filter = currentHistFilter();
+  const params = { ...filter, limit: _histPageSize, offset: _histPage * _histPageSize };
+  try {
+    const res = await beetApi.historyList(params);
+    renderHistoryTable(res.items || [], res.total || 0);
+  } catch (e) {
+    body.innerHTML = "";
+    errBox.textContent = "Could not load history: " + (e.message || e);
+    errBox.hidden = false;
+  }
+}
+
+function renderHistoryTable(items, total) {
+  const body = $("histBody");
+  if (!items.length) {
+    body.innerHTML = "<tr><td colspan='6' class='empty'>No submissions match the current filter.</td></tr>";
+  } else {
+    body.innerHTML = items.map(it => `
+      <tr class="row" data-sid="${escapeHtml(it.submission_id)}">
+        <td>${escapeHtml(it.recorded_at || "")}</td>
+        <td><span class="badge ${it.determination}">${it.determination}</span></td>
+        <td style="text-align:right">${Number(it.p_llm).toFixed(3)}</td>
+        <td>${escapeHtml(it.source || "")}</td>
+        <td>${it.has_feedback ? "✓" : "—"}</td>
+        <td style="font-size:11px;color:var(--muted);">${escapeHtml(it.submission_id)}</td>
+      </tr>`).join("");
+    body.querySelectorAll("tr.row").forEach(tr => {
+      tr.addEventListener("click", () => openFromHistory(tr.dataset.sid));
+    });
+  }
+  const start = _histPage * _histPageSize + 1;
+  const end = Math.min(start + items.length - 1, total);
+  $("histPageInfo").textContent = total ? `${start}–${end} of ${total}` : "0 of 0";
+  $("histPrev").disabled = _histPage === 0;
+  $("histNext").disabled = end >= total;
+}
+
+$("histApply").addEventListener("click", () => { _histPage = 0; loadHistory(); });
+$("histReset").addEventListener("click", () => {
+  document.querySelectorAll("#histDeterm input").forEach(i => { i.checked = false; syncCheckGroup(); });
+  $("histSince").value = ""; $("histUntil").value = ""; $("histSearch").value = "";
+  _histPage = 0; loadHistory();
+});
+$("histPrev").addEventListener("click", () => { if (_histPage > 0) { _histPage--; loadHistory(); } });
+$("histNext").addEventListener("click", () => { _histPage++; loadHistory(); });
+
+$("histExportJson").addEventListener("click", () => downloadExport({ format: "json", ...currentHistFilter() }, "history.json"));
+$("histExportCsv").addEventListener("click", () => downloadExport({ format: "csv", ...currentHistFilter() }, "history.csv"));
+
+// Check-group styling
+function syncCheckGroup() {
+  document.querySelectorAll("#histDeterm label").forEach(l => {
+    l.classList.toggle("on", l.querySelector("input").checked);
+  });
+}
+document.querySelectorAll("#histDeterm input").forEach(i => i.addEventListener("change", syncCheckGroup));
+
+async function openFromHistory(submissionId) {
+  if (!submissionId) return;
+  try {
+    const got = await beetApi.historyGet(submissionId);
+    if (!got || !got.report) return;
+    $("text").value = got.text || "";
+    lastAnalysis = { text: got.text || "", submission_id: submissionId };
+    viewingHistoryId = submissionId;
+    render(got.report);
+    $("feedback").hidden = false;
+    $("fbStatus").textContent = ""; $("fbStatus").className = "status";
+    $("fbNotes").value = "";
+    $("historyBanner").hidden = false;
+    $("historyBannerId").textContent = submissionId;
+    $("rerun").hidden = !got.text;
+    showTab("analyze");
+  } catch (e) {
+    alert("Failed to open submission: " + (e.message || e));
+  }
+}
 </script>
 </body>
 </html>
