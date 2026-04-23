@@ -103,7 +103,11 @@ gui:
   history:
     enabled: true
     db_path: data/beet_history.sqlite3
-    retain_text: true
+    # Default to hash-only (text is NOT persisted in the queryable log).
+    # Set retain_text: true to store the submission text alongside the
+    # hash. Opt-in because the history DB lives on local disk with no
+    # auth; retained text would include anything a reviewer has pasted.
+    retain_text: false
   drift:
     enabled: true
     store_path: data/drift_alerts

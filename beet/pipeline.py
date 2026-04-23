@@ -167,6 +167,9 @@ class BeetPipeline:
         text = normalize_text(text)
         router_decision = self._router.route(text)
         cfg = self._config
+        # Per-call accumulator for detector failures — the run methods append
+        # to this and analyze_detailed threads it onto the Determination.
+        self._phase_errors: list[dict] = []
         results: list[LayerResult] = []
         phases_run = [1]
         phase1_results = self._run_phase(1, text, cfg, router_decision.skip_detectors)
@@ -186,6 +189,7 @@ class BeetPipeline:
         )
         determination = self._decision.decide(fusion_result, results)
         determination.cascade_phases = phases_run
+        determination.detector_errors = list(self._phase_errors)
         if self._monitor is not None:
             try:
                 vec = self._fusion._assembler.assemble(
@@ -240,10 +244,27 @@ class BeetPipeline:
             det_config = detector_cfg.get(det_id, {})
             if not det_config.get("enabled", True): continue
             detector = self._detectors.get(det_id)
-            if detector is None: continue
+            if detector is None:
+                # Enabled in config but not importable (missing extras). Record
+                # so the verdict carries visible evidence of reduced coverage
+                # rather than quietly dropping a layer.
+                self._phase_errors.append({
+                    "layer_id": det_id,
+                    "phase": phase,
+                    "error": "detector not registered (install the relevant extras?)",
+                })
+                continue
             try:
                 result = detector.analyze(text, det_config)
                 results.append(result)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "detector %s raised in phase %d: %s", det_id, phase, exc,
+                    exc_info=True,
+                )
+                self._phase_errors.append({
+                    "layer_id": det_id,
+                    "phase": phase,
+                    "error": str(exc) or type(exc).__name__,
+                })
         return results

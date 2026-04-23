@@ -31,6 +31,7 @@ def build_json_report(determination: Determination, submission_id: str = "") -> 
         "conformal_set": list(determination.conformal_set) if determination.conformal_set is not None else None,
         "conformal_alpha": determination.conformal_alpha,
         "fusion_mode": determination.fusion_mode,
+        "detector_errors": [dict(e) for e in determination.detector_errors],
     }
 
 def build_text_report(determination: Determination) -> str:

@@ -30,16 +30,33 @@ except ImportError:
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "default.yaml"
 
 
+_SENSITIVE_TOKENS = (
+    "secret", "api_key", "apikey", "token", "password", "passwd",
+    "credential", "auth",
+)
+
+
 def _redact(config: dict) -> dict:
-    """Strip API keys, paths under /data, etc., from config for /config endpoint."""
+    """Strip API keys, credentials, and auth tokens from the config dict.
+
+    Walks the config recursively (not just a fixed set of sections) and
+    replaces any value whose key contains a sensitive token with the
+    literal string "[redacted]".
+    """
     import copy
-    redacted = copy.deepcopy(config)
-    for section in ("privacy", "fusion", "monitoring"):
-        if section in redacted and isinstance(redacted[section], dict):
-            for key in list(redacted[section].keys()):
-                if any(tok in key.lower() for tok in ("secret", "api_key", "token")):
-                    redacted[section][key] = "[redacted]"
-    return redacted
+
+    def _walk(node):
+        if isinstance(node, dict):
+            return {
+                k: ("[redacted]" if any(t in str(k).lower() for t in _SENSITIVE_TOKENS)
+                    else _walk(v))
+                for k, v in node.items()
+            }
+        if isinstance(node, list):
+            return [_walk(x) for x in node]
+        return node
+
+    return _walk(copy.deepcopy(config))
 
 
 def create_app(config_path: Path | str | None = None) -> Any:

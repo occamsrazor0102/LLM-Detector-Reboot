@@ -26,3 +26,37 @@ def test_preamble_critical_override(engine):
     det = engine.decide(fusion, layer_results=[critical_result])
     assert det.label == "RED"
     assert det.override_applied is True
+
+
+def test_mixed_boundary_high_probability_triggers_mixed_label(engine):
+    mixed_result = LayerResult(
+        layer_id="mixed_boundary", domain="prose", raw_score=0.7, p_llm=0.55, confidence=0.6,
+        signals={
+            "mixed_probability": 0.72,
+            "n_boundaries": 2,
+            "segment_determinations": ["AMBER", "GREEN"],
+            "boundary_positions": [0.35, 0.72],
+        },
+        determination="AMBER",
+        attacker_tiers=["A4"], compute_cost="moderate", min_text_length=100,
+    )
+    fusion = FusionResult(p_llm=0.55, confidence_interval=(0.40, 0.70),
+                          prediction_set=["AMBER", "YELLOW"], feature_contributions={}, top_contributors=[])
+    det = engine.decide(fusion, layer_results=[mixed_result])
+    assert det.label == "MIXED"
+    assert det.override_applied is True
+    assert det.mixed_report is not None
+    assert det.mixed_report["mixed_probability"] == 0.72
+
+
+def test_mixed_boundary_low_probability_does_not_trigger_mixed(engine):
+    mixed_result = LayerResult(
+        layer_id="mixed_boundary", domain="prose", raw_score=0.2, p_llm=0.3, confidence=0.5,
+        signals={"mixed_probability": 0.1, "n_boundaries": 0, "segment_determinations": ["GREEN"]},
+        determination="GREEN",
+        attacker_tiers=["A4"], compute_cost="moderate", min_text_length=100,
+    )
+    fusion = FusionResult(p_llm=0.3, confidence_interval=(0.2, 0.45),
+                          prediction_set=["YELLOW"], feature_contributions={}, top_contributors=[])
+    det = engine.decide(fusion, layer_results=[mixed_result])
+    assert det.label != "MIXED"

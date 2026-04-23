@@ -357,6 +357,7 @@
           <div class="highlight-legend" id="highlightLegend"></div>
         </details>
         <div class="detectors" id="detectors"></div>
+        <div id="detectorErrors" hidden style="margin-top:8px;padding:8px 10px;background:rgba(209,73,91,0.14);border:1px solid rgba(209,73,91,0.4);border-radius:4px;font-size:12px;color:var(--ink);"></div>
         <div class="feedback" id="feedback" hidden>
           <label>Reviewer feedback</label>
           <div class="row">
@@ -794,6 +795,7 @@ function render(r) {
   }).join("");
   $("contribs").innerHTML = contribs || "<div class='k'>no contributions reported</div>";
   $("detectors").textContent = "Detectors run: " + (r.detectors_run || []).join(", ");
+  renderDetectorErrors(r.detector_errors || []);
   renderLayers(r.layer_results || []);
   renderAllContribs(r.feature_contributions || {});
   renderHighlights(r.layer_results || []);
@@ -871,6 +873,16 @@ function formatSignal(v) {
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(4);
   if (typeof v === "string") return v;
   try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+function renderDetectorErrors(errors) {
+  const el = $("detectorErrors");
+  if (!errors.length) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  const rows = errors.map(e =>
+    `<li><code>${escapeHtml(e.layer_id || "")}</code> (phase ${e.phase ?? "?"}): ${escapeHtml(e.error || "")}</li>`
+  ).join("");
+  el.innerHTML = `<strong>⚠ reduced coverage —</strong> ${errors.length} detector(s) failed during analysis:<ul style="margin:4px 0 0 18px;padding:0;">${rows}</ul>`;
 }
 
 function renderLayers(layers) {

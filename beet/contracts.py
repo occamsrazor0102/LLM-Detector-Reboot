@@ -55,6 +55,10 @@ class Determination:
     conformal_set: list[str] | None = None
     conformal_alpha: float | None = None
     fusion_mode: str = "naive"
+    # Detectors that were expected to run but failed (import missing at
+    # runtime, or raised during analyze). Propagated so the UI can warn
+    # about reduced coverage instead of silently hiding the drop.
+    detector_errors: list[dict] = field(default_factory=list)
 
 @dataclass
 class RouterDecision:

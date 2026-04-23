@@ -31,6 +31,30 @@ def test_determination_has_layer_results_and_contributions(pipeline):
     assert all(lr.layer_id in det.detectors_run for lr in det.layer_results)
     assert isinstance(det.feature_contributions, dict)
 
+
+def test_detector_errors_field_is_present(pipeline):
+    # No detector should crash on a routine input; the field still
+    # exists and is empty in the happy path.
+    det = pipeline.analyze(A0_CLINICAL_TASK)
+    assert isinstance(det.detector_errors, list)
+
+
+def test_failing_detector_is_recorded_not_swallowed(pipeline, monkeypatch):
+    # Force one of the active detectors to raise and confirm the error
+    # surfaces on the Determination instead of disappearing.
+    target = pipeline._detectors.get("fingerprint_vocab")
+    assert target is not None
+
+    def _boom(text, config):
+        raise RuntimeError("intentional failure for test")
+
+    monkeypatch.setattr(target, "analyze", _boom)
+    det = pipeline.analyze(A0_CLINICAL_TASK)
+    assert any(e["layer_id"] == "fingerprint_vocab" for e in det.detector_errors)
+    assert all("intentional failure" in e["error"]
+               for e in det.detector_errors
+               if e["layer_id"] == "fingerprint_vocab")
+
 def test_p_llm_is_between_0_and_1(pipeline):
     det = pipeline.analyze(A1_CLEANED)
     assert 0.0 <= det.p_llm <= 1.0

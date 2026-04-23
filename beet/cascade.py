@@ -1,9 +1,14 @@
 from beet.contracts import LayerResult
 
 PHASE1_DETECTORS = {"preamble", "fingerprint_vocab", "prompt_structure", "voice_spec", "instruction_density", "nssi"}
-PHASE2_DETECTORS = {"surprisal_dynamics", "contrastive_lm", "token_cohesiveness"}
+# mixed_boundary operates on sentence-level style dissonance within a single
+# submission, so it's a Phase-2 detector despite earlier being parked in
+# Phase 4 (batch-only) where it never fired.
+PHASE2_DETECTORS = {"surprisal_dynamics", "contrastive_lm", "token_cohesiveness", "mixed_boundary"}
 PHASE3_DETECTORS = {"perturbation", "contrastive_gen", "dna_gpt"}
-PHASE4_DETECTORS = {"cross_similarity", "mixed_boundary"}
+# Phase 4 is batch-only; contributor_graph is invoked separately via
+# pipeline.analyze_contributors, not through the normal cascade.
+PHASE4_DETECTORS = {"cross_similarity"}
 
 class CascadeScheduler:
     def __init__(self, config: dict):

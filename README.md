@@ -42,9 +42,9 @@ Sixteen detectors organised into four cascade phases:
 | Phase | Cost | Detectors |
 |------:|------|-----------|
 | 1 | trivial / cheap | `preamble`, `fingerprint_vocab`, `prompt_structure`, `voice_spec`, `instruction_density`, `nssi` |
-| 2 | moderate | `surprisal_dynamics`, `contrastive_lm`, `token_cohesiveness` |
+| 2 | moderate | `surprisal_dynamics`, `contrastive_lm`, `token_cohesiveness`, `mixed_boundary` |
 | 3 | expensive (LLM-backed) | `perturbation`, `contrastive_gen`, `dna_gpt` |
-| 4 | batch-only | `cross_similarity`, `mixed_boundary`, `contributor_graph` |
+| 4 | batch-only | `cross_similarity` (and `contributor_graph` via `pipeline.analyze_contributors`) |
 
 The cascade scheduler short-circuits on confident Phase 1 verdicts and
 only invokes expensive Phase 3 detectors when the cheaper signals are
@@ -163,11 +163,20 @@ probability" UX are held up by hand-picked heuristics:
   CI in the UI should be read as an uncertainty cue, not a
   frequentist guarantee. Replacing this with a proper split-conformal
   implementation is on the roadmap.
-- **Four detectors are stubs without extras.** `contrastive_gen`,
-  `dna_gpt`, and `perturbation` return `SKIP` without API keys;
-  `contributor_graph` is batch-only and returns `SKIP` on single
-  inputs. In a typical single-text analyze call you get 8–10 active
-  detectors, not 16.
+- **Several detectors are stubs or unimplemented.** `perturbation`
+  currently returns `SKIP` with `not_implemented`; `contrastive_gen`
+  and `dna_gpt` require API keys and also return `not_implemented`
+  for parts of their logic; `contributor_graph` and
+  `cross_similarity` are batch-only and return `SKIP` on single
+  inputs. The Settings tab shows an "available" column so you can
+  see which detectors are really active in the current config —
+  with the default `pip install` and the `screening` profile,
+  roughly 6 of the 13 declared detectors actually contribute to
+  the verdict (all Phase 1 heuristics plus `mixed_boundary`).
+- **Detector failures are surfaced, not swallowed.** If a detector
+  raises during analyze, the failure is logged and reported back on
+  `Determination.detector_errors`; the UI shows a red "reduced
+  coverage" banner in the result panel.
 - **No public benchmark.** BEET has not been evaluated on HC3, RAID,
   or any other standard human-vs-LLM dataset. The unit tests verify
   internal contracts; they do not establish external correctness.
@@ -182,6 +191,18 @@ probability" UX are held up by hand-picked heuristics:
 - **DriftMonitor observations are in-memory.** Baselines are rebuilt
   from the persistent history store on demand, but the current window
   is lost on sidecar restart.
+- **No auth or rate limiting on the HTTP/FastAPI transports.** The
+  GUI binds to `127.0.0.1` by default, but the `serve` mode on a
+  non-loopback interface ships without authentication. Front with a
+  reverse proxy (oauth2-proxy, nginx basic-auth) if you expose it
+  beyond a single machine.
+- **Heuristic detectors are genre-sensitive.** `fingerprint_vocab`,
+  `nssi`, and `prompt_structure` were seeded with words and patterns
+  common in LLM output — but many of those patterns are *also*
+  common in disciplined human writing (SOPs, clinical protocols,
+  legal briefs, educational material). Expect false positives on
+  polished domain prose until the layers are recalibrated against a
+  matched-genre corpus.
 
 If you're considering deploying this somewhere users will see the
 verdicts: at minimum, train the fusion on a labeled dataset, replace
