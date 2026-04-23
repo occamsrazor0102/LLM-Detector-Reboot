@@ -22,11 +22,27 @@ _SPEC_PATTERNS = [
 ]
 _SPEC_RE = [re.compile(p, re.IGNORECASE) for p in _SPEC_PATTERNS]
 
-def _score_voice(text: str, word_count: int) -> float:
-    return sum(len(p.findall(text)) for p in _VOICE_RE) / max(word_count, 1) * 100
+def _score_voice(text: str, word_count: int, spans: list[dict] | None = None) -> float:
+    count = 0
+    for p in _VOICE_RE:
+        for m in p.finditer(text):
+            count += 1
+            if spans is not None:
+                spans.append({"start": m.start(), "end": m.end(),
+                              "kind": "voice_informal",
+                              "note": f"informal voice '{m.group(0)}'"})
+    return count / max(word_count, 1) * 100
 
-def _score_spec(text: str, word_count: int) -> float:
-    return sum(len(p.findall(text)) for p in _SPEC_RE) / max(word_count, 1) * 100
+def _score_spec(text: str, word_count: int, spans: list[dict] | None = None) -> float:
+    count = 0
+    for p in _SPEC_RE:
+        for m in p.finditer(text):
+            count += 1
+            if spans is not None:
+                spans.append({"start": m.start(), "end": m.end(),
+                              "kind": "spec",
+                              "note": f"spec language '{m.group(0)}'"})
+    return count / max(word_count, 1) * 100
 
 class VoiceSpecDetector:
     id = "voice_spec"
@@ -36,8 +52,9 @@ class VoiceSpecDetector:
     def analyze(self, text: str, config: dict) -> LayerResult:
         words = text.split()
         word_count = max(len(words), 1)
-        voice_score = _score_voice(text, word_count)
-        spec_score = _score_spec(text, word_count)
+        spans: list[dict] = []
+        voice_score = _score_voice(text, word_count, spans)
+        spec_score = _score_spec(text, word_count, spans)
         mode = "normal"
         p_llm = 0.10
         if voice_score >= 1.5 and spec_score >= 4.0:
@@ -60,6 +77,7 @@ class VoiceSpecDetector:
             signals={"voice_score": round(voice_score, 3), "spec_score": round(spec_score, 3), "mode": mode},
             determination=determination, attacker_tiers=["A0", "A1", "A2"],
             compute_cost=self.compute_cost, min_text_length=30,
+            spans=spans,
         )
 
     def calibrate(self, labeled_data: list) -> None: pass

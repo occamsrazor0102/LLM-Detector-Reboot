@@ -18,12 +18,21 @@ class NSSIDetector:
     def analyze(self, text: str, config: dict) -> LayerResult:
         words = text.split()
         word_count = max(len(words), 1)
-        formulaic_density = len(_FORMULAIC.findall(text)) / word_count * 100
-        power_adj_saturation = len(_POWER_ADJ.findall(text)) / word_count * 100
-        discourse_scaffolding = len(_DISCOURSE.findall(text)) / word_count * 100
-        demonstrative_monotony = len(_DEMONSTRATIVE.findall(text)) / word_count * 100
-        scare_quote_density = len(_SCARE_QUOTES.findall(text)) / word_count * 100
-        transition_density = len(_TRANSITION.findall(text)) / word_count * 100
+        spans: list[dict] = []
+        def _collect(pattern, note_prefix: str) -> int:
+            n = 0
+            for m in pattern.finditer(text):
+                n += 1
+                spans.append({"start": m.start(), "end": m.end(),
+                              "kind": "boilerplate",
+                              "note": f"{note_prefix} '{m.group(0)}'"})
+            return n
+        formulaic_density = _collect(_FORMULAIC, "formulaic") / word_count * 100
+        power_adj_saturation = _collect(_POWER_ADJ, "power adjective") / word_count * 100
+        discourse_scaffolding = _collect(_DISCOURSE, "discourse marker") / word_count * 100
+        demonstrative_monotony = _collect(_DEMONSTRATIVE, "demonstrative") / word_count * 100
+        scare_quote_density = _collect(_SCARE_QUOTES, "scare quote") / word_count * 100
+        transition_density = _collect(_TRANSITION, "transition") / word_count * 100
         sentences = _SENT_SPLIT.split(text)
         sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
         the_this_ratio = sum(1 for s in sentences if _THE_THIS_START.match(s)) / max(len(sentences), 1)
@@ -49,7 +58,8 @@ class NSSIDetector:
                 "scare_quote_density": round(scare_quote_density, 3), "transition_density": round(transition_density, 3),
                 "sentence_start_monotony": round(sentence_start_monotony, 3), "deep_sections": round(deep_sections, 3),
                 "n_signals_active": active_signals, "convergence_multiplier": round(convergence, 3)},
-            determination=determination, attacker_tiers=["A0", "A1"], compute_cost=self.compute_cost, min_text_length=100)
+            determination=determination, attacker_tiers=["A0", "A1"], compute_cost=self.compute_cost, min_text_length=100,
+            spans=spans)
     def calibrate(self, labeled_data: list) -> None: pass
 
 DETECTOR = NSSIDetector()

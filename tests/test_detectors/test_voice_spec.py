@@ -46,3 +46,13 @@ def test_result_fields(detector, config):
     assert "voice_score" in result.signals
     assert "spec_score" in result.signals
     assert "mode" in result.signals
+
+
+def test_voice_spec_emits_separate_voice_and_spec_spans(detector, config):
+    text = "okay so basically you must ensure the protocol complies with the standard."
+    result = detector.analyze(text, config)
+    kinds = {s["kind"] for s in result.spans}
+    assert "voice_informal" in kinds
+    assert "spec" in kinds
+    for s in result.spans:
+        assert text[s["start"]:s["end"]]

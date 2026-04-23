@@ -250,7 +250,28 @@
     }
     .highlighted-text mark.span-preamble { background: rgba(209,73,91,0.22); color: var(--ink); }
     .highlighted-text mark.span-fingerprint { background: rgba(228,163,58,0.22); color: var(--ink); }
+    .highlighted-text mark.span-instruction { background: rgba(63,140,248,0.22); color: var(--ink); }
+    .highlighted-text mark.span-structure { background: rgba(87,167,115,0.20); color: var(--ink); }
+    .highlighted-text mark.span-boilerplate { background: rgba(155,118,211,0.22); color: var(--ink); }
+    .highlighted-text mark.span-voice_informal { background: rgba(219,205,83,0.22); color: var(--ink); }
+    .highlighted-text mark.span-spec { background: rgba(125,175,180,0.22); color: var(--ink); }
+    .highlighted-text mark.span-misc { background: rgba(139,148,158,0.22); color: var(--ink); }
     .highlighted-text mark:hover { outline: 1px solid currentColor; }
+    .highlight-legend {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px;
+      font-size: 11px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .highlight-legend .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 1px 6px; border-radius: 2px;
+    }
+    .highlight-legend .chip.preamble { background: rgba(209,73,91,0.22); color: var(--ink); }
+    .highlight-legend .chip.fingerprint { background: rgba(228,163,58,0.22); color: var(--ink); }
+    .highlight-legend .chip.instruction { background: rgba(63,140,248,0.22); color: var(--ink); }
+    .highlight-legend .chip.structure { background: rgba(87,167,115,0.20); color: var(--ink); }
+    .highlight-legend .chip.boilerplate { background: rgba(155,118,211,0.22); color: var(--ink); }
+    .highlight-legend .chip.voice_informal { background: rgba(219,205,83,0.22); color: var(--ink); }
+    .highlight-legend .chip.spec { background: rgba(125,175,180,0.22); color: var(--ink); }
 
     @media (max-width: 900px) {
       .view-analyze { grid-template-columns: 1fr; }
@@ -325,7 +346,7 @@
         <details class="section" id="highlightsSection">
           <summary>Highlighted text</summary>
           <div class="highlighted-text" id="highlightedText"></div>
-          <div style="color:var(--muted);font-size:11px;margin-top:6px;">Preamble matches red, fingerprint words amber. Hover for detector note.</div>
+          <div class="highlight-legend" id="highlightLegend"></div>
         </details>
         <div class="detectors" id="detectors"></div>
         <div class="feedback" id="feedback" hidden>
@@ -747,9 +768,22 @@ function render(r) {
   renderHighlights(r.layer_results || []);
 }
 
+const KIND_LABELS = {
+  preamble: "preamble match",
+  fingerprint: "fingerprint word",
+  instruction: "instruction verb",
+  structure: "prompt structure",
+  boilerplate: "boilerplate phrase",
+  voice_informal: "informal voice",
+  spec: "spec language",
+  misc: "other",
+};
+
 function renderHighlights(layers) {
   const text = $("text").value || "";
   const el = $("highlightedText");
+  const legend = $("highlightLegend");
+  legend.innerHTML = "";
   if (!text) { el.textContent = ""; return; }
   const spans = [];
   for (const l of layers) {
@@ -759,14 +793,21 @@ function renderHighlights(layers) {
       spans.push({ ...s, layer: l.layer_id });
     }
   }
-  if (!spans.length) { el.innerHTML = `<span style="color:var(--muted);">${escapeHtml(text)}</span>`; return; }
+  if (!spans.length) {
+    el.innerHTML = `<span style="color:var(--muted);">${escapeHtml(text)}</span>`;
+    legend.innerHTML = `<span>No spans emitted for this submission.</span>`;
+    return;
+  }
   spans.sort((a, b) => a.start - b.start);
   // Drop overlapping (keep first)
   const kept = [];
+  const kindCounts = {};
   let last = -1;
   for (const s of spans) {
     if (s.start < last) continue;
     kept.push(s); last = s.end;
+    const k = s.kind || "misc";
+    kindCounts[k] = (kindCounts[k] || 0) + 1;
   }
   let html = "";
   let cursor = 0;
@@ -779,6 +820,14 @@ function renderHighlights(layers) {
   }
   if (cursor < text.length) html += escapeHtml(text.slice(cursor));
   el.innerHTML = html;
+
+  const chips = Object.entries(kindCounts).sort((a, b) => b[1] - a[1]).map(([kind, n]) => {
+    const label = KIND_LABELS[kind] || kind;
+    return `<span class="chip ${escapeHtml(kind)}">${escapeHtml(label)} · ${n}</span>`;
+  }).join("");
+  const dropped = spans.length - kept.length;
+  legend.innerHTML = chips + (dropped > 0 ? `<span>${dropped} overlap dropped</span>` : "") +
+    `<span>(hover a highlight for detector note)</span>`;
 }
 
 function escapeHtml(s) {

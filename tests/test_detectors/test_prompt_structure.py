@@ -36,3 +36,11 @@ def test_layer_id_and_domain(detector, config):
     assert result.layer_id == "prompt_structure"
     assert result.domain == "prompt"
     assert result.compute_cost == "cheap"
+
+
+def test_prompt_structure_emits_spans_for_clinical_task(detector, config):
+    result = detector.analyze(A0_CLINICAL_TASK, config)
+    assert result.spans
+    for s in result.spans:
+        assert s["kind"] == "structure"
+        assert A0_CLINICAL_TASK[s["start"]:s["end"]]

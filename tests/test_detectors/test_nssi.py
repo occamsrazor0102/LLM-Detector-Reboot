@@ -15,3 +15,18 @@ def test_nssi_signals_dict_has_all_keys():
     assert "power_adj_saturation" in result.signals
     assert "discourse_scaffolding" in result.signals
     assert "sentence_start_monotony" in result.signals
+
+
+def test_nssi_emits_boilerplate_spans():
+    d = NSSIDetector()
+    text = (
+        "In conclusion, the comprehensive analysis presents a robust framework. "
+        "Furthermore, this approach demonstrates significant innovation. "
+        "Moreover, the transformative nature of the work is worth noting."
+    )
+    result = d.analyze(text, {})
+    assert result.spans
+    kinds = {s["kind"] for s in result.spans}
+    assert kinds == {"boilerplate"}
+    for s in result.spans:
+        assert text[s["start"]:s["end"]]

@@ -25,9 +25,22 @@ class InstructionDensityDetector:
     def analyze(self, text: str, config: dict) -> LayerResult:
         words = text.split()
         word_count = max(len(words), 1)
-        imperatives = len(_IMPERATIVE_RE.findall(text))
-        conditionals = len(_CONDITIONAL_RE.findall(text))
-        binary = len(_BINARY_RE.findall(text))
+        spans: list[dict] = []
+        imperatives = 0
+        for m in _IMPERATIVE_RE.finditer(text):
+            imperatives += 1
+            spans.append({"start": m.start(), "end": m.end(), "kind": "instruction",
+                          "note": f"imperative verb '{m.group(0)}'"})
+        conditionals = 0
+        for m in _CONDITIONAL_RE.finditer(text):
+            conditionals += 1
+            spans.append({"start": m.start(), "end": m.end(), "kind": "instruction",
+                          "note": f"conditional '{m.group(0)}'"})
+        binary = 0
+        for m in _BINARY_RE.finditer(text):
+            binary += 1
+            spans.append({"start": m.start(), "end": m.end(), "kind": "instruction",
+                          "note": f"binary spec '{m.group(0)}'"})
         idi = (imperatives + conditionals * 0.5 + binary * 2.0) / word_count * 100
         p_llm = _interpolate(idi, _IDI_TO_P_LLM)
         if p_llm >= 0.75: determination = "RED"
@@ -37,7 +50,8 @@ class InstructionDensityDetector:
         return LayerResult(layer_id=self.id, domain=self.domain, raw_score=idi, p_llm=p_llm,
             confidence=min(0.4 + word_count / 1000, 0.88),
             signals={"idi": round(idi, 2), "imperatives": imperatives, "conditionals": conditionals, "binary_specs": binary},
-            determination=determination, attacker_tiers=["A0", "A1", "A2"], compute_cost=self.compute_cost, min_text_length=30)
+            determination=determination, attacker_tiers=["A0", "A1", "A2"], compute_cost=self.compute_cost, min_text_length=30,
+            spans=spans)
     def calibrate(self, labeled_data: list) -> None: pass
 
 DETECTOR = InstructionDensityDetector()
