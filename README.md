@@ -163,16 +163,25 @@ probability" UX are held up by hand-picked heuristics:
   CI in the UI should be read as an uncertainty cue, not a
   frequentist guarantee. Replacing this with a proper split-conformal
   implementation is on the roadmap.
-- **Several detectors are stubs or unimplemented.** `perturbation`
-  currently returns `SKIP` with `not_implemented`; `contrastive_gen`
-  and `dna_gpt` require API keys and also return `not_implemented`
-  for parts of their logic; `contributor_graph` and
-  `cross_similarity` are batch-only and return `SKIP` on single
-  inputs. The Settings tab shows an "available" column so you can
-  see which detectors are really active in the current config —
-  with the default `pip install` and the `screening` profile,
-  roughly 6 of the 13 declared detectors actually contribute to
-  the verdict (all Phase 1 heuristics plus `mixed_boundary`).
+- **Tier-3 detectors are implemented but opt-in.** `perturbation`
+  runs a real DetectGPT-style log-prob curvature score (requires
+  `beet[tier2]` for `torch`+`transformers`; loads `distilgpt2` by
+  default, roughly 300MB). `contrastive_gen` generates k baselines
+  via an LLM provider and compares via shingle Jaccard or
+  sentence-transformers embeddings (requires `beet[tier3]` +
+  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`). `dna_gpt` truncates
+  the text at 30/50/70% and scores n-gram overlap of provider
+  continuations (same tier-3 requirements).
+- **`contributor_graph` and `cross_similarity` are batch-only.**
+  They return `SKIP` on single-text analyze; `cross_similarity`
+  runs on `pipeline.analyze_batch`, `contributor_graph` via a
+  separate `pipeline.analyze_contributors` entry point.
+- **The Settings tab shows what's really active.** Each declared
+  detector is tagged "available" or flagged with its missing
+  requirement (tier2 / tier3 / API key / batch-only). With the
+  default `pip install` and the `screening` profile, roughly 7 of
+  the 13 declared detectors actually contribute to the verdict
+  (all Phase 1 heuristics plus `mixed_boundary`).
 - **Detector failures are surfaced, not swallowed.** If a detector
   raises during analyze, the failure is logged and reported back on
   `Determination.detector_errors`; the UI shows a red "reduced
