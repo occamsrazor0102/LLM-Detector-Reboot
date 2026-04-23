@@ -199,6 +199,32 @@ def test_config_switch_bad_name_returns_400(server):
     assert body.get("code") == "ERR_BAD_PROFILE"
 
 
+def test_monitoring_summary_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    status, body = _post(url, "/monitoring/summary", {})
+    assert status == 200
+    assert body["total"] == 1
+    assert "mean_p_llm" in body
+
+
+def test_monitoring_timeline_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    status, body = _post(url, "/monitoring/timeline", {"limit": 50})
+    assert status == 200
+    assert len(body["items"]) == 1
+    assert "p_llm" in body["items"][0]
+
+
+def test_monitoring_detectors_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    status, body = _post(url, "/monitoring/detectors", {"limit": 100})
+    assert status == 200
+    assert isinstance(body["detectors"], list)
+
+
 def test_feedback_records_in_history(server):
     url, hist = server
     _, analyzed = _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})

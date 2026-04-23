@@ -217,6 +217,12 @@ class Sidecar:
             return self._get_config()
         if method == "switch_profile":
             return self._switch_profile(params)
+        if method == "monitoring_summary":
+            return self._monitoring_summary(params)
+        if method == "monitoring_timeline":
+            return self._monitoring_timeline(params)
+        if method == "monitoring_detectors":
+            return self._monitoring_detectors(params)
         if method == "shutdown":
             self._running = False
             return {"ok": True}
@@ -362,6 +368,21 @@ class Sidecar:
             "profile": view["profile"],
             "detectors_enabled": [d["id"] for d in view["detectors"] if d["enabled"]],
         }
+
+    def _monitoring_summary(self, params: dict) -> dict:
+        if self._history is None:
+            raise SidecarError("ERR_DISABLED", "history is disabled in this config")
+        return self._history.stats(since=params.get("since"))
+
+    def _monitoring_timeline(self, params: dict) -> dict:
+        if self._history is None:
+            raise SidecarError("ERR_DISABLED", "history is disabled in this config")
+        return {"items": self._history.timeline(limit=int(params.get("limit", 200)))}
+
+    def _monitoring_detectors(self, params: dict) -> dict:
+        if self._history is None:
+            raise SidecarError("ERR_DISABLED", "history is disabled in this config")
+        return {"detectors": self._history.detector_stats(limit=int(params.get("limit", 500)))}
 
     def _record(
         self,

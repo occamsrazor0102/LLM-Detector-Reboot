@@ -145,6 +145,12 @@ def _make_handler(
                 self._handle_history_delete(body)
             elif path == "/config/switch":
                 self._handle_switch_profile(body)
+            elif path == "/monitoring/summary":
+                self._handle_monitoring_summary(body)
+            elif path == "/monitoring/timeline":
+                self._handle_monitoring_timeline(body)
+            elif path == "/monitoring/detectors":
+                self._handle_monitoring_detectors(body)
             else:
                 self.send_error(404)
 
@@ -277,6 +283,38 @@ def _make_handler(
                 "profile": view["profile"],
                 "detectors_enabled": [d["id"] for d in view["detectors"] if d["enabled"]],
             })
+
+        def _handle_monitoring_summary(self, body: dict) -> None:
+            if history is None:
+                self._send_json(503, {"error": "history disabled"})
+                return
+            try:
+                self._send_json(200, history.stats(since=body.get("since")))
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+
+        def _handle_monitoring_timeline(self, body: dict) -> None:
+            if history is None:
+                self._send_json(503, {"error": "history disabled"})
+                return
+            try:
+                limit = int(body.get("limit", 200))
+                self._send_json(200, {"items": history.timeline(limit=limit)})
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+
+        def _handle_monitoring_detectors(self, body: dict) -> None:
+            if history is None:
+                self._send_json(503, {"error": "history disabled"})
+                return
+            try:
+                limit = int(body.get("limit", 500))
+                self._send_json(200, {"detectors": history.detector_stats(limit=limit)})
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
 
         def _record_history(
             self,

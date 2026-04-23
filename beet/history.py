@@ -268,6 +268,140 @@ class HistoryStore:
         ]
         return json.dumps(payload, indent=2), "application/json", f"beet-history-{stamp}.json"
 
+    def stats(self, *, since: str | None = None) -> dict:
+        """Aggregate summary over the submission window.
+
+        If `since` is provided, restrict to submissions with
+        recorded_at >= since (ISO-8601). Otherwise aggregate over all.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        since_24h = (now - datetime.timedelta(hours=24)).isoformat() + "Z"
+        since_7d = (now - datetime.timedelta(days=7)).isoformat() + "Z"
+        since_14d = (now - datetime.timedelta(days=14)).isoformat() + "Z"
+        with self._connect() as conn:
+            where = "WHERE recorded_at >= ?" if since else ""
+            args = (since,) if since else ()
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM submissions {where}", args
+            ).fetchone()[0]
+            mean_p = conn.execute(
+                f"SELECT AVG(p_llm) FROM submissions {where}", args
+            ).fetchone()[0] or 0.0
+            last24 = conn.execute(
+                "SELECT COUNT(*) FROM submissions WHERE recorded_at >= ?",
+                (since_24h,),
+            ).fetchone()[0]
+            last7d = conn.execute(
+                "SELECT COUNT(*) FROM submissions WHERE recorded_at >= ?",
+                (since_7d,),
+            ).fetchone()[0]
+            by_det = dict(conn.execute(
+                f"SELECT determination, COUNT(*) FROM submissions {where} "
+                "GROUP BY determination",
+                args,
+            ).fetchall())
+            per_day_rows = conn.execute(
+                "SELECT substr(recorded_at, 1, 10) AS d, COUNT(*) "
+                "FROM submissions WHERE recorded_at >= ? GROUP BY d ORDER BY d",
+                (since_14d,),
+            ).fetchall()
+            per_day = {r[0]: int(r[1]) for r in per_day_rows}
+            feedback_total = conn.execute(
+                "SELECT COUNT(*) FROM feedback_log"
+            ).fetchone()[0]
+            feedback_rows = conn.execute(
+                "SELECT f.confirmed_label, s.p_llm "
+                "FROM feedback_log f JOIN submissions s "
+                "ON f.submission_id = s.submission_id"
+            ).fetchall()
+
+        correct = 0
+        brier_sum = 0.0
+        for label, p in feedback_rows:
+            pred = 1 if float(p) >= 0.5 else 0
+            if int(label) == pred:
+                correct += 1
+            brier_sum += (float(p) - int(label)) ** 2
+        n_fb = len(feedback_rows)
+        feedback_accuracy = (correct / n_fb) if n_fb else None
+        brier = (brier_sum / n_fb) if n_fb else None
+        return {
+            "total": int(total),
+            "last_24h": int(last24),
+            "last_7d": int(last7d),
+            "mean_p_llm": round(float(mean_p or 0.0), 4),
+            "by_determination": {k: int(v) for k, v in by_det.items()},
+            "per_day": per_day,
+            "feedback_count": int(feedback_total),
+            "feedback_labeled_count": n_fb,
+            "feedback_accuracy": round(feedback_accuracy, 4) if feedback_accuracy is not None else None,
+            "brier": round(brier, 4) if brier is not None else None,
+        }
+
+    def timeline(self, *, limit: int = 200) -> list[dict]:
+        """Recent submissions for timeline plotting, most recent first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT submission_id, recorded_at, p_llm, determination "
+                "FROM submissions ORDER BY recorded_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [
+            {
+                "submission_id": r["submission_id"],
+                "recorded_at": r["recorded_at"],
+                "p_llm": round(float(r["p_llm"]), 4),
+                "determination": r["determination"],
+            }
+            for r in rows
+        ]
+
+    def detector_stats(self, *, limit: int = 500) -> list[dict]:
+        """Aggregate per-detector across the last N reports.
+
+        Iterates the recent reports (by recorded_at desc) and pulls
+        layer_results out of the stored JSON. Detectors that don't
+        appear in any report don't show up.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT report FROM submissions ORDER BY recorded_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        agg: dict[str, dict] = {}
+        for r in rows:
+            try:
+                report = json.loads(r["report"])
+            except Exception:
+                continue
+            for lr in report.get("layer_results") or []:
+                did = lr.get("layer_id")
+                if not did:
+                    continue
+                a = agg.setdefault(did, {
+                    "id": did,
+                    "n": 0,
+                    "sum_p": 0.0,
+                    "sum_conf": 0.0,
+                    "determination_hist": {},
+                })
+                a["n"] += 1
+                a["sum_p"] += float(lr.get("p_llm", 0.0) or 0.0)
+                a["sum_conf"] += float(lr.get("confidence", 0.0) or 0.0)
+                det = str(lr.get("determination") or "UNCERTAIN")
+                a["determination_hist"][det] = a["determination_hist"].get(det, 0) + 1
+        out = []
+        for did, a in sorted(agg.items()):
+            n = a["n"] or 1
+            out.append({
+                "id": did,
+                "n": a["n"],
+                "mean_p_llm": round(a["sum_p"] / n, 4),
+                "mean_confidence": round(a["sum_conf"] / n, 4),
+                "determination_hist": a["determination_hist"],
+            })
+        return out
+
     @staticmethod
     def _build_filter(
         determination: list[str] | None,

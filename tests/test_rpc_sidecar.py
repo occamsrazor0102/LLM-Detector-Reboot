@@ -131,6 +131,26 @@ def test_switch_profile_bad_name_raises(sidecar):
     assert ex.value.code == "ERR_BAD_PROFILE"
 
 
+def test_monitoring_summary_and_timeline(sidecar):
+    sc, _ = sidecar
+    sc.handle("analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    sc.handle("analyze", {"text": "quick human note about nothing in particular"})
+    summary = sc.handle("monitoring_summary", {})
+    assert summary["total"] == 2
+    assert isinstance(summary["by_determination"], dict)
+    tl = sc.handle("monitoring_timeline", {"limit": 10})
+    assert len(tl["items"]) == 2
+
+
+def test_monitoring_detectors(sidecar):
+    sc, _ = sidecar
+    sc.handle("analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    res = sc.handle("monitoring_detectors", {"limit": 100})
+    assert isinstance(res["detectors"], list) and res["detectors"]
+    d = res["detectors"][0]
+    assert {"id", "n", "mean_p_llm", "mean_confidence", "determination_hist"} <= set(d.keys())
+
+
 def test_disabled_history_raises(tmp_path):
     config_path = Path(__file__).parent.parent / "configs" / "screening.yaml"
     cfg = load_config(config_path)
