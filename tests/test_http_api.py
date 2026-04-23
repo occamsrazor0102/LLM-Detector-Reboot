@@ -8,20 +8,23 @@ from pathlib import Path
 
 import pytest
 
+from beet.config import load_config
 from beet.gui.server import _make_handler
 from beet.history import HistoryStore
 from beet.monitoring.meta_detector import MetaDetector
 from beet.pipeline import BeetPipeline
+from beet.runtime import RuntimeContext
 
 
 @pytest.fixture
 def server(tmp_path):
     config_path = Path(__file__).parent.parent / "configs" / "screening.yaml"
-    pipeline = BeetPipeline.from_config_file(config_path)
+    cfg = load_config(config_path)
+    ctx = RuntimeContext(BeetPipeline(cfg), "screening", cfg)
     meta = MetaDetector()
     feedback_path = tmp_path / "feedback.jsonl"
     history = HistoryStore(tmp_path / "history.sqlite3")
-    handler = _make_handler(pipeline, meta, feedback_path, history, profile="screening")
+    handler = _make_handler(meta=meta, feedback_path=feedback_path, history=history, ctx=ctx)
     httpd = HTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -160,6 +163,40 @@ def test_history_export_csv_download(server):
     assert "text/csv" in headers["Content-Type"]
     text = data.decode("utf-8")
     assert text.splitlines()[0].startswith("submission_id,")
+
+
+def test_config_profiles_lists_repo_profiles(server):
+    url, _ = server
+    status, body = _get_json(url, "/config/profiles")
+    assert status == 200
+    names = {p["name"] for p in body["profiles"]}
+    assert {"default", "screening", "strict"} <= names
+    assert body["current"] == "screening"
+
+
+def test_config_current_curated_view(server):
+    url, _ = server
+    status, body = _get_json(url, "/config/current")
+    assert status == 200
+    assert body["profile"] == "screening"
+    assert "red" in body["thresholds"]
+    assert isinstance(body["detectors"], list) and body["detectors"]
+
+
+def test_config_switch_updates_active_profile(server):
+    url, _ = server
+    status, body = _post(url, "/config/switch", {"name": "strict"})
+    assert status == 200 and body["ok"] is True and body["profile"] == "strict"
+    # health now reports strict
+    _, health = _get_json(url, "/health")
+    assert health["profile"] == "strict"
+
+
+def test_config_switch_bad_name_returns_400(server):
+    url, _ = server
+    status, body = _post(url, "/config/switch", {"name": "no-such-xyz"})
+    assert status == 400
+    assert body.get("code") == "ERR_BAD_PROFILE"
 
 
 def test_feedback_records_in_history(server):

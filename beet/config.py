@@ -46,6 +46,37 @@ def load_config(path: Path | str) -> dict:
 
     return cfg
 
+def resolve_profile_path(name: str) -> Path:
+    """Return the absolute path to a profile's YAML in CONFIGS_DIR."""
+    return CONFIGS_DIR / f"{name}.yaml"
+
+
+def list_profiles() -> list[dict]:
+    """List available profiles in CONFIGS_DIR.
+
+    Skips files in subdirectories (e.g. patterns/) and files starting
+    with '_'. For each profile, returns its canonical name (from
+    `_profile` field if present, else filename stem), path, and optional
+    description/extends metadata.
+    """
+    profiles: list[dict] = []
+    for p in sorted(CONFIGS_DIR.glob("*.yaml")):
+        if p.name.startswith("_"):
+            continue
+        try:
+            raw = _load_yaml(p)
+        except Exception:
+            continue
+        name = raw.get("_profile") or p.stem
+        profiles.append({
+            "name": str(name),
+            "path": str(p),
+            "extends": raw.get("_extends"),
+            "description": raw.get("_description"),
+        })
+    return profiles
+
+
 def get_pattern_list(name: str) -> list | dict:
     """Load a pattern file from configs/patterns/."""
     path = PATTERNS_DIR / f"{name}.yaml"

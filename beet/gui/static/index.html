@@ -217,11 +217,13 @@
   <h1>BEET 2.0</h1>
   <span class="sub">LLM Authorship Detection</span>
   <span class="mode" id="modeIndicator"></span>
+  <span class="mode" id="profileIndicator"></span>
 </header>
 <nav class="tabs" role="tablist">
   <button data-tab="analyze" aria-selected="true">Analyze</button>
   <button data-tab="batch">Batch</button>
   <button data-tab="history">History</button>
+  <button data-tab="settings">Settings</button>
 </nav>
 <main>
 
@@ -324,6 +326,36 @@
     </div>
   </section>
 
+  <section class="view" id="view-settings">
+    <div class="panel">
+      <label>Active profile</label>
+      <div class="actions" style="margin-top:4px;gap:12px;align-items:center;">
+        <select id="profileSelect" style="background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:6px 10px;font-size:13px;min-width:200px;"></select>
+        <button id="profileSwitchBtn">Switch</button>
+        <span class="reason" id="profileSwitchStatus" style="margin:0;"></span>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:12px;">
+      <label>Thresholds</label>
+      <table class="data" id="thresholdsTable"><tbody id="thresholdsBody"></tbody></table>
+    </div>
+    <div class="panel" style="margin-top:12px;">
+      <label>Detectors</label>
+      <table class="data">
+        <thead><tr><th>id</th><th>enabled</th><th style="text-align:right">weight</th></tr></thead>
+        <tbody id="detectorsBody"></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:12px;">
+      <label>History store</label>
+      <table class="data" id="historyCfgTable"><tbody id="historyCfgBody"></tbody></table>
+    </div>
+    <div class="actions" style="margin-top:12px;">
+      <button class="ghost" id="settingsReload">Reload</button>
+      <span class="reason" id="settingsStatus" style="margin:0;"></span>
+    </div>
+  </section>
+
   <section class="view" id="view-history">
     <div class="filter-bar">
       <div class="group">
@@ -399,6 +431,9 @@ const beetApi = (() => {
       historyGet: (id) => invoke("history_get", { submissionId: id }),
       historyDelete: (id) => invoke("history_delete", { submissionId: id }),
       historyExport: (params) => invoke("history_export", { params }),
+      listProfiles: () => invoke("list_profiles", {}),
+      getConfig: () => invoke("get_config", {}),
+      switchProfile: (name) => invoke("switch_profile", { params: { name } }),
     };
   }
   const post = async (path, body) => {
@@ -427,12 +462,15 @@ const beetApi = (() => {
       }
       return { mode: "download", url: "/history/export?" + q.toString() };
     },
+    listProfiles: () => fetch("/config/profiles").then(r => r.json()),
+    getConfig: () => fetch("/config/current").then(r => r.json()),
+    switchProfile: (name) => post("/config/switch", { name }),
   };
 })();
 $("modeIndicator").textContent = beetApi.mode;
 
 /* ---------------- tab routing ---------------- */
-const VIEWS = ["analyze", "batch", "history"];
+const VIEWS = ["analyze", "batch", "history", "settings"];
 function showTab(name) {
   if (!VIEWS.includes(name)) name = "analyze";
   VIEWS.forEach(v => {
@@ -443,6 +481,7 @@ function showTab(name) {
   });
   if (location.hash.slice(2) !== name) location.hash = "#/" + name;
   if (name === "history") loadHistory();
+  if (name === "settings") loadSettings();
 }
 document.querySelectorAll("nav.tabs button").forEach(b => {
   b.addEventListener("click", () => showTab(b.dataset.tab));
@@ -830,6 +869,93 @@ function syncCheckGroup() {
   });
 }
 document.querySelectorAll("#histDeterm input").forEach(i => i.addEventListener("change", syncCheckGroup));
+
+/* ---------------- Settings tab ---------------- */
+let _currentProfile = null;
+
+async function refreshProfileIndicator() {
+  try {
+    const h = await beetApi.health();
+    _currentProfile = h.profile || null;
+    $("profileIndicator").textContent = _currentProfile ? `profile: ${_currentProfile}` : "";
+  } catch { /* swallow */ }
+}
+refreshProfileIndicator();
+
+async function loadSettings() {
+  $("settingsStatus").textContent = "Loading…";
+  try {
+    const [profiles, cfg] = await Promise.all([beetApi.listProfiles(), beetApi.getConfig()]);
+    renderProfileSelect(profiles);
+    renderConfigView(cfg);
+    $("settingsStatus").textContent = "";
+  } catch (e) {
+    $("settingsStatus").textContent = "Error: " + (e.message || e);
+  }
+}
+
+function renderProfileSelect(data) {
+  const sel = $("profileSelect");
+  const current = data.current || "";
+  _currentProfile = current;
+  $("profileIndicator").textContent = current ? `profile: ${current}` : "";
+  sel.innerHTML = (data.profiles || []).map(p =>
+    `<option value="${escapeHtml(p.name)}" ${p.name === current ? "selected" : ""}>
+      ${escapeHtml(p.name)}${p.extends ? ` (extends ${escapeHtml(p.extends)})` : ""}
+    </option>`
+  ).join("");
+}
+
+function renderConfigView(cfg) {
+  const t = cfg.thresholds || {};
+  const abst = t.abstention || {};
+  $("thresholdsBody").innerHTML = [
+    ["RED threshold (p ≥)", Number(t.red || 0).toFixed(2)],
+    ["AMBER threshold (p ≥)", Number(t.amber || 0).toFixed(2)],
+    ["YELLOW threshold (p ≥)", Number(t.yellow || 0).toFixed(2)],
+    ["Abstention enabled", abst.enabled ? "yes" : "no"],
+    ["Max prediction-set size", String(abst.max_prediction_set_size || 0)],
+  ].map(([k, v]) => `<tr><td style="color:var(--muted);font-family:inherit">${k}</td><td>${escapeHtml(String(v))}</td></tr>`).join("");
+
+  const dets = cfg.detectors || [];
+  $("detectorsBody").innerHTML = dets.map(d => `
+    <tr style="${d.enabled ? "" : "opacity:0.4;"}">
+      <td>${escapeHtml(d.id)}</td>
+      <td>${d.enabled ? "<span class='badge GREEN'>on</span>" : "<span class='badge UNCERTAIN'>off</span>"}</td>
+      <td style="text-align:right">${Number(d.weight || 0).toFixed(2)}</td>
+    </tr>
+  `).join("");
+
+  const h = cfg.history || {};
+  $("historyCfgBody").innerHTML = [
+    ["Enabled", h.enabled ? "yes" : "no"],
+    ["Retain text", h.retain_text ? "yes" : "no"],
+    ["DB path", h.db_path || ""],
+  ].map(([k, v]) => `<tr><td style="color:var(--muted);font-family:inherit">${k}</td><td>${escapeHtml(String(v))}</td></tr>`).join("");
+}
+
+$("profileSwitchBtn").addEventListener("click", async () => {
+  const name = $("profileSelect").value;
+  if (!name) return;
+  const btn = $("profileSwitchBtn");
+  const status = $("profileSwitchStatus");
+  btn.disabled = true; status.textContent = "Switching…";
+  try {
+    const res = await beetApi.switchProfile(name);
+    if (res && res.ok) {
+      status.textContent = `Switched to ${res.profile} (${(res.detectors_enabled || []).length} detectors active)`;
+      await loadSettings();
+    } else {
+      status.textContent = "Switch failed";
+    }
+  } catch (e) {
+    status.textContent = "Error: " + (e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("settingsReload").addEventListener("click", loadSettings);
 
 async function openFromHistory(submissionId) {
   if (!submissionId) return;

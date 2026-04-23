@@ -12,11 +12,18 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from beet.config import list_profiles
 from beet.history import HistoryStore, mint_submission_id
 from beet.monitoring.meta_detector import MetaDetector
 from beet.pipeline import BeetPipeline
 from beet.report import build_json_report
-from beet.sidecar import DEFAULT_FEEDBACK_PATH, SidecarError, record_feedback
+from beet.runtime import RuntimeContext
+from beet.sidecar import (
+    DEFAULT_FEEDBACK_PATH,
+    SidecarError,
+    _curated_config_view,
+    record_feedback,
+)
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,12 +44,19 @@ def _history_from_config(config: dict | None) -> HistoryStore | None:
 
 
 def _make_handler(
-    pipeline: BeetPipeline,
-    meta: MetaDetector,
-    feedback_path: Path,
-    history: HistoryStore | None,
-    profile: str | None,
+    pipeline: BeetPipeline | None = None,
+    meta: MetaDetector | None = None,
+    feedback_path: Path | None = None,
+    history: HistoryStore | None = None,
+    profile: str | None = None,
+    ctx: RuntimeContext | None = None,
 ):
+    if ctx is None:
+        if pipeline is None:
+            raise ValueError("_make_handler requires either ctx or pipeline")
+        ctx = RuntimeContext(pipeline, profile, {})
+    meta = meta or MetaDetector()
+    feedback_path = feedback_path or DEFAULT_FEEDBACK_PATH
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
@@ -71,13 +85,21 @@ def _make_handler(
             if path in ("/", "/index.html"):
                 self._serve_static("index.html")
             elif path == "/health":
+                pipe = ctx.pipeline
                 self._send_json(200, {
                     "status": "ok",
-                    "model_loaded": pipeline._fusion._model is not None,
-                    "conformal_loaded": pipeline._fusion._conformal is not None,
+                    "model_loaded": pipe._fusion._model is not None,
+                    "conformal_loaded": pipe._fusion._conformal is not None,
                     "history_enabled": history is not None,
-                    "profile": profile,
+                    "profile": ctx.profile,
                 })
+            elif path == "/config/profiles":
+                self._send_json(200, {
+                    "profiles": list_profiles(),
+                    "current": ctx.profile,
+                })
+            elif path == "/config/current":
+                self._send_json(200, _curated_config_view(ctx.profile, ctx.config))
             elif path == "/history/export":
                 if history is None:
                     self._send_json(503, {"error": "history disabled"})
@@ -121,6 +143,8 @@ def _make_handler(
                 self._handle_history_get(body)
             elif path == "/history/delete":
                 self._handle_history_delete(body)
+            elif path == "/config/switch":
+                self._handle_switch_profile(body)
             else:
                 self.send_error(404)
 
@@ -131,7 +155,7 @@ def _make_handler(
                 return
             sid = str(body.get("submission_id") or "").strip() or mint_submission_id()
             try:
-                det = pipeline.analyze(text)
+                det = ctx.pipeline.analyze(text)
                 report = build_json_report(det, submission_id=sid)
                 self._record_history(report, source="analyze", text=text)
                 self._send_json(200, report)
@@ -159,7 +183,7 @@ def _make_handler(
                     skipped.append(idx)
                     continue
                 try:
-                    det = pipeline.analyze(txt)
+                    det = ctx.pipeline.analyze(txt)
                     report = build_json_report(det, submission_id=sid)
                     self._record_history(report, source="batch", text=txt, batch_id=batch_id)
                     results.append(report)
@@ -170,7 +194,7 @@ def _make_handler(
 
         def _handle_feedback(self, body: dict) -> None:
             try:
-                result = record_feedback(pipeline, meta, feedback_path, body)
+                result = record_feedback(ctx.pipeline, meta, feedback_path, body)
                 if history is not None:
                     sid = str(body.get("submission_id") or result.get("submission_id") or "").strip()
                     if sid:
@@ -233,6 +257,27 @@ def _make_handler(
             ok = history.delete(sid)
             self._send_json(200, {"ok": ok})
 
+        def _handle_switch_profile(self, body: dict) -> None:
+            name = str(body.get("name") or "").strip()
+            if not name:
+                self._send_json(400, {"error": "name required"})
+                return
+            try:
+                ctx.switch_profile(name)
+            except FileNotFoundError as e:
+                self._send_json(400, {"error": str(e), "code": "ERR_BAD_PROFILE"})
+                return
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(400, {"error": str(e), "code": "ERR_BAD_PROFILE"})
+                return
+            view = _curated_config_view(ctx.profile, ctx.config)
+            self._send_json(200, {
+                "ok": True,
+                "profile": view["profile"],
+                "detectors_enabled": [d["id"] for d in view["detectors"] if d["enabled"]],
+            })
+
         def _record_history(
             self,
             report: dict,
@@ -244,7 +289,9 @@ def _make_handler(
             if history is None:
                 return
             try:
-                history.record(report, source=source, text=text, profile=profile, batch_id=batch_id)
+                history.record(
+                    report, source=source, text=text, profile=ctx.profile, batch_id=batch_id
+                )
             except Exception as e:
                 sys.stderr.write(f"[gui] history write failed: {e}\n")
 
@@ -276,7 +323,8 @@ def serve(
     meta = MetaDetector()
     fp = feedback_path or DEFAULT_FEEDBACK_PATH
     history = _history_from_config(config)
-    handler = _make_handler(pipeline, meta, fp, history, profile)
+    ctx = RuntimeContext(pipeline, profile, config or {})
+    handler = _make_handler(meta=meta, feedback_path=fp, history=history, ctx=ctx)
     httpd = HTTPServer((host, port), handler)
     url = f"http://{host}:{port}/"
     hist_status = "enabled" if history is not None else "disabled"

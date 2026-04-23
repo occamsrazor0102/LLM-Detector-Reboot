@@ -35,15 +35,54 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from beet.config import load_config
+from beet.config import list_profiles, load_config
 from beet.history import HistoryStore, mint_submission_id
 from beet.pipeline import BeetPipeline
 from beet.report import build_json_report
 from beet.monitoring.meta_detector import MetaDetector
+from beet.runtime import RuntimeContext
 
 
 PROTOCOL_VERSION = 1
 DEFAULT_FEEDBACK_PATH = Path("data") / "reviewer_feedback.jsonl"
+
+
+def _curated_config_view(profile: str | None, config: dict) -> dict:
+    """A UI-friendly projection of the config.
+
+    Kept separate from the raw dict so the RPC shape stays stable even if
+    the internal config layout changes.
+    """
+    decision = (config or {}).get("decision") or {}
+    abst = decision.get("abstention") or {}
+    detectors_raw = (config or {}).get("detectors") or {}
+    detectors = [
+        {
+            "id": did,
+            "enabled": bool((d or {}).get("enabled", True)),
+            "weight": float((d or {}).get("weight", 1.0)),
+        }
+        for did, d in detectors_raw.items()
+    ]
+    history = ((config or {}).get("gui") or {}).get("history") or {}
+    return {
+        "profile": profile,
+        "thresholds": {
+            "red": float(decision.get("red_threshold", 0.75)),
+            "amber": float(decision.get("amber_threshold", 0.50)),
+            "yellow": float(decision.get("yellow_threshold", 0.25)),
+            "abstention": {
+                "enabled": bool(abst.get("enabled", True)),
+                "max_prediction_set_size": int(abst.get("max_prediction_set_size", 3)),
+            },
+        },
+        "detectors": detectors,
+        "history": {
+            "enabled": bool(history.get("enabled", True)),
+            "retain_text": bool(history.get("retain_text", True)),
+            "db_path": history.get("db_path", "data/beet_history.sqlite3"),
+        },
+    }
 
 
 def history_from_config(config: dict | None) -> HistoryStore | None:
@@ -131,17 +170,29 @@ def record_feedback(
 class Sidecar:
     def __init__(
         self,
-        pipeline: BeetPipeline,
-        feedback_path: Path,
+        pipeline: BeetPipeline | None = None,
+        feedback_path: Path | None = None,
         history: HistoryStore | None = None,
         profile: str | None = None,
+        ctx: RuntimeContext | None = None,
     ):
-        self._pipeline = pipeline
-        self._feedback_path = feedback_path
+        if ctx is None:
+            if pipeline is None:
+                raise ValueError("Sidecar requires either ctx or pipeline")
+            ctx = RuntimeContext(pipeline, profile, {})
+        self._ctx = ctx
+        self._feedback_path = feedback_path or DEFAULT_FEEDBACK_PATH
         self._history = history
-        self._profile = profile
         self._meta = MetaDetector()
         self._running = True
+
+    @property
+    def _pipeline(self) -> BeetPipeline:
+        return self._ctx.pipeline
+
+    @property
+    def _profile(self) -> str | None:
+        return self._ctx.profile
 
     def handle(self, method: str, params: dict) -> dict:
         if method == "analyze":
@@ -160,6 +211,12 @@ class Sidecar:
             return self._history_delete(params)
         if method == "history_export":
             return self._history_export(params)
+        if method == "list_profiles":
+            return self._list_profiles()
+        if method == "get_config":
+            return self._get_config()
+        if method == "switch_profile":
+            return self._switch_profile(params)
         if method == "shutdown":
             self._running = False
             return {"ok": True}
@@ -283,6 +340,29 @@ class Sidecar:
         )
         return {"content": content, "mime": mime, "filename": filename}
 
+    def _list_profiles(self) -> dict:
+        return {"profiles": list_profiles(), "current": self._ctx.profile}
+
+    def _get_config(self) -> dict:
+        return _curated_config_view(self._ctx.profile, self._ctx.config)
+
+    def _switch_profile(self, params: dict) -> dict:
+        name = str(params.get("name") or "").strip()
+        if not name:
+            raise SidecarError("ERR_BAD_PARAMS", "name required")
+        try:
+            self._ctx.switch_profile(name)
+        except FileNotFoundError as e:
+            raise SidecarError("ERR_BAD_PROFILE", str(e)) from e
+        except Exception as e:
+            raise SidecarError("ERR_BAD_PROFILE", f"failed to switch profile: {e}") from e
+        view = _curated_config_view(self._ctx.profile, self._ctx.config)
+        return {
+            "ok": True,
+            "profile": view["profile"],
+            "detectors_enabled": [d["id"] for d in view["detectors"] if d["enabled"]],
+        }
+
     def _record(
         self,
         report: dict,
@@ -308,17 +388,24 @@ def _write(obj: dict, stream=None) -> None:
 
 
 def run(
-    pipeline: BeetPipeline,
-    feedback_path: Path,
+    pipeline: BeetPipeline | None = None,
+    feedback_path: Path | None = None,
     stdin=None,
     stdout=None,
     history: HistoryStore | None = None,
     profile: str | None = None,
+    ctx: RuntimeContext | None = None,
 ) -> int:
     """Drive the JSON-RPC loop. Returns the process exit code."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
-    sidecar = Sidecar(pipeline, feedback_path, history=history, profile=profile)
+    sidecar = Sidecar(
+        pipeline=pipeline,
+        feedback_path=feedback_path,
+        history=history,
+        profile=profile,
+        ctx=ctx,
+    )
     _write({"event": "ready", "pid": os.getpid(), "protocol_version": PROTOCOL_VERSION}, stream=stdout)
 
     for raw in stdin:
@@ -400,8 +487,9 @@ def main(argv: list[str] | None = None) -> int:
     pipeline = BeetPipeline(config)
     feedback_path = Path(args.feedback_path)
     history = history_from_config(config)
+    ctx = RuntimeContext(pipeline, args.profile, config)
 
-    return run(pipeline, feedback_path, history=history, profile=args.profile)
+    return run(feedback_path=feedback_path, history=history, ctx=ctx)
 
 
 if __name__ == "__main__":

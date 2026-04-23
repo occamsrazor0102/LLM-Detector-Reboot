@@ -3,21 +3,23 @@ from pathlib import Path
 
 import pytest
 
+from beet.config import load_config
 from beet.history import HistoryStore
 from beet.pipeline import BeetPipeline
+from beet.runtime import RuntimeContext
 from beet.sidecar import Sidecar, SidecarError
 
 
 @pytest.fixture
 def sidecar(tmp_path):
     config_path = Path(__file__).parent.parent / "configs" / "screening.yaml"
-    pipeline = BeetPipeline.from_config_file(config_path)
+    cfg = load_config(config_path)
+    ctx = RuntimeContext(BeetPipeline(cfg), "screening", cfg)
     history = HistoryStore(tmp_path / "h.sqlite3")
     return Sidecar(
-        pipeline,
+        ctx=ctx,
         feedback_path=tmp_path / "fb.jsonl",
         history=history,
-        profile="screening",
     ), history
 
 
@@ -95,10 +97,45 @@ def test_feedback_also_writes_history_feedback(sidecar):
     assert got["feedback"][0]["confirmed_label"] == 1
 
 
+def test_list_profiles_returns_current(sidecar):
+    sc, _ = sidecar
+    res = sc.handle("list_profiles", {})
+    assert res["current"] == "screening"
+    names = {p["name"] for p in res["profiles"]}
+    assert {"default", "screening", "strict"} <= names
+
+
+def test_get_config_curated_shape(sidecar):
+    sc, _ = sidecar
+    got = sc.handle("get_config", {})
+    assert got["profile"] == "screening"
+    assert "red" in got["thresholds"] and "amber" in got["thresholds"]
+    assert isinstance(got["detectors"], list) and got["detectors"]
+    for d in got["detectors"]:
+        assert {"id", "enabled", "weight"} <= set(d.keys())
+
+
+def test_switch_profile_changes_active_profile(sidecar):
+    sc, _ = sidecar
+    res = sc.handle("switch_profile", {"name": "strict"})
+    assert res["ok"] is True and res["profile"] == "strict"
+    # subsequent health should reflect the swap
+    h = sc.handle("health", {})
+    assert h["profile"] == "strict"
+
+
+def test_switch_profile_bad_name_raises(sidecar):
+    sc, _ = sidecar
+    with pytest.raises(SidecarError) as ex:
+        sc.handle("switch_profile", {"name": "no-such-xyz"})
+    assert ex.value.code == "ERR_BAD_PROFILE"
+
+
 def test_disabled_history_raises(tmp_path):
     config_path = Path(__file__).parent.parent / "configs" / "screening.yaml"
-    pipeline = BeetPipeline.from_config_file(config_path)
-    sc = Sidecar(pipeline, feedback_path=tmp_path / "fb.jsonl", history=None, profile="screening")
+    cfg = load_config(config_path)
+    ctx = RuntimeContext(BeetPipeline(cfg), "screening", cfg)
+    sc = Sidecar(ctx=ctx, feedback_path=tmp_path / "fb.jsonl", history=None)
     with pytest.raises(SidecarError) as ex:
         sc.handle("history_list", {})
     assert ex.value.code == "ERR_DISABLED"
