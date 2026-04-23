@@ -3,7 +3,7 @@ from beet.contracts import Determination
 
 def build_json_report(determination: Determination, submission_id: str = "") -> dict:
     return {
-        "submission_id": submission_id, "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "submission_id": submission_id, "timestamp": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
         "determination": determination.label, "p_llm": round(determination.p_llm, 4),
         "confidence_interval": [round(x, 4) for x in determination.confidence_interval],
         "prediction_set": determination.prediction_set, "reason": determination.reason,

@@ -63,6 +63,30 @@ def test_drift_from_config_constructs_when_enabled(tmp_path):
     assert isinstance(d, DriftMonitor)
 
 
+def test_drift_from_config_honors_tuning_under_gui_drift(tmp_path):
+    cfg = {"gui": {"drift": {
+        "enabled": True,
+        "store_path": str(tmp_path / "d"),
+        "window_size": 42,
+        "kl_threshold": 0.05,
+        "ece_threshold": 0.07,
+    }}}
+    d = drift_from_config(cfg)
+    assert d._window == 42
+    assert d._kl_threshold == 0.05
+    assert d._ece_threshold == 0.07
+
+
+def test_drift_from_config_top_level_drift_monitoring_wins(tmp_path):
+    cfg = {
+        "drift_monitoring": {"window_size": 99},
+        "gui": {"drift": {"enabled": True, "store_path": str(tmp_path / "d"),
+                           "window_size": 42}},
+    }
+    d = drift_from_config(cfg)
+    assert d._window == 99
+
+
 def test_analyze_records_drift_observation(env):
     sc, _, drift = env
     sc.handle("analyze", {"text": "Certainly! Here is a comprehensive overview."})

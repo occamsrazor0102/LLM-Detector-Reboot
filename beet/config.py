@@ -1,10 +1,13 @@
 # beet/config.py
+import re
 from pathlib import Path
 import yaml
 import copy
 
 CONFIGS_DIR = Path(__file__).parent.parent / "configs"
 PATTERNS_DIR = CONFIGS_DIR / "patterns"
+
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 REQUIRED_KEYS = {"detectors", "cascade", "decision"}
 
@@ -47,7 +50,13 @@ def load_config(path: Path | str) -> dict:
     return cfg
 
 def resolve_profile_path(name: str) -> Path:
-    """Return the absolute path to a profile's YAML in CONFIGS_DIR."""
+    """Return the absolute path to a profile's YAML in CONFIGS_DIR.
+
+    Rejects names with path separators, `..`, or characters outside the
+    `[A-Za-z0-9_-]` set so a caller can't escape the configs directory.
+    """
+    if not isinstance(name, str) or not _PROFILE_NAME_RE.fullmatch(name):
+        raise ConfigError(f"invalid profile name: {name!r}")
     return CONFIGS_DIR / f"{name}.yaml"
 
 

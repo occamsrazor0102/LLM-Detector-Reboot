@@ -596,7 +596,7 @@ const beetApi = (() => {
     return {
       mode: "tauri",
       analyze: (text, submission_id) => invoke("analyze", { text, submissionId: submission_id || null }),
-      analyzeBatch: (items, batch_id) => invoke("analyze_batch", { items }),
+      analyzeBatch: (items, batch_id) => invoke("analyze_batch", { items, batchId: batch_id || null }),
       feedback: (p) => invoke("feedback", {
         text: p.text, confirmedLabel: p.confirmed_label,
         submissionId: p.submission_id || null, reviewerNotes: p.reviewer_notes || null,

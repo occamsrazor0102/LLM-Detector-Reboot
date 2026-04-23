@@ -92,8 +92,21 @@ def drift_from_config(config: dict | None) -> DriftMonitor | None:
     if drift_cfg.get("enabled", True) is False:
         return None
     store_path = Path(drift_cfg.get("store_path", "data/drift_alerts"))
+    # DriftMonitor reads tuning keys (window_size, kl_threshold, ece_threshold)
+    # from config["drift_monitoring"]. Route any equivalent keys nested under
+    # gui.drift through that top-level namespace so the obvious place to tune
+    # drift (next to enabled/store_path) actually takes effect. Top-level
+    # drift_monitoring wins if both are set.
+    merged = dict(config or {})
+    top_level = dict(merged.get("drift_monitoring") or {})
+    tuning_keys = {"window_size", "kl_threshold", "ece_threshold"}
+    for k in tuning_keys:
+        if k not in top_level and k in drift_cfg:
+            top_level[k] = drift_cfg[k]
+    if top_level:
+        merged["drift_monitoring"] = top_level
     try:
-        return DriftMonitor(store_path, config or {})
+        return DriftMonitor(store_path, merged)
     except Exception as e:
         log.warning("drift monitor disabled: %s", e)
         return None
@@ -177,7 +190,7 @@ def record_feedback(
     except Exception as e:
         log.warning("feedback re-analysis failed; persisting label only: %s", e)
 
-    recorded_at = datetime.datetime.utcnow().isoformat() + "Z"
+    recorded_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     row: dict[str, Any] = {
         "submission_id": submission_id,
         "text": text,
@@ -304,6 +317,11 @@ class Sidecar:
             if not isinstance(txt, str) or not txt.strip():
                 skipped.append(idx)
                 continue
+            if sid in texts:
+                raise SidecarError(
+                    "ERR_BAD_PARAMS",
+                    f"duplicate submission_id '{sid}' at index {idx}",
+                )
             texts[sid] = txt
             order.append((idx, sid))
         if not texts:
@@ -566,6 +584,13 @@ def run(
             req = json.loads(line)
         except json.JSONDecodeError as e:
             _write({"id": None, "error": {"code": "ERR_BAD_JSON", "message": str(e)}}, stream=stdout)
+            continue
+
+        if not isinstance(req, dict):
+            _write(
+                {"id": None, "error": {"code": "ERR_BAD_REQUEST", "message": "request must be a JSON object"}},
+                stream=stdout,
+            )
             continue
 
         req_id = req.get("id")

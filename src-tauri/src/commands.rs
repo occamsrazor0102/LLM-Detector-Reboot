@@ -27,9 +27,15 @@ pub async fn analyze(
 #[tauri::command]
 pub async fn analyze_batch(
     items: Value,
+    batch_id: Option<String>,
     manager: State<'_, Arc<SidecarManager>>,
 ) -> Result<Value, SidecarError> {
-    manager.send_request("analyze_batch", json!({ "items": items })).await
+    manager
+        .send_request(
+            "analyze_batch",
+            json!({ "items": items, "batch_id": batch_id }),
+        )
+        .await
 }
 
 #[tauri::command]

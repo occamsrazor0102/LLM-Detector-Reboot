@@ -35,6 +35,21 @@ def test_switch_profile_unknown_raises_and_preserves_state(ctx):
     assert ctx.profile == before_profile
 
 
+def test_resolve_profile_path_rejects_traversal():
+    from beet.config import ConfigError, resolve_profile_path
+
+    for bad in ["../evil", "../../etc/passwd", "a/b", "a\\b", "/abs", ""]:
+        with pytest.raises(ConfigError):
+            resolve_profile_path(bad)
+
+
+def test_switch_profile_traversal_is_rejected(ctx):
+    before_profile = ctx.profile
+    with pytest.raises(Exception):
+        ctx.switch_profile("../../../tmp/evil")
+    assert ctx.profile == before_profile
+
+
 def test_list_profiles_includes_repo_profiles():
     names = {p["name"] for p in list_profiles()}
     # sanity: at least default + screening + strict exist
