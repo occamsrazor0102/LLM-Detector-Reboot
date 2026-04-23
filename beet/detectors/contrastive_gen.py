@@ -70,17 +70,6 @@ def _jaccard(a: set, b: set) -> float:
     return inter / union if union else 0.0
 
 
-def _embedding_similarity(texts: list[str], submission: str) -> list[float]:
-    """Cosine similarity of submission vs each text via sentence-transformers."""
-    from sentence_transformers import SentenceTransformer, util  # type: ignore
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    sub_emb = model.encode([submission], convert_to_tensor=True, normalize_embeddings=True)
-    base_emb = model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
-    sims = util.cos_sim(sub_emb, base_emb)[0].tolist()
-    # Clip into [0, 1] so the heuristic interpolation behaves.
-    return [max(0.0, min(1.0, s)) for s in sims]
-
-
 def _resolve_api_key(config: dict, provider: str) -> str | None:
     key = config.get("api_key") or config.get(f"{provider}_api_key")
     if key:
@@ -88,16 +77,64 @@ def _resolve_api_key(config: dict, provider: str) -> str | None:
     return os.environ.get(f"{provider.upper()}_API_KEY")
 
 
+def _sanitize_provider_error(exc: Exception, api_key: str | None = None) -> str:
+    msg = f"{type(exc).__name__}"
+    detail = str(exc)
+    if detail:
+        if api_key and api_key in detail:
+            detail = detail.replace(api_key, "[redacted]")
+        detail = detail[:200]
+        msg = f"{msg}: {detail}"
+    return msg
+
+
+def _task_description_overlaps_submission(task_description: str, submission: str) -> bool:
+    """Privacy guard: reject when the caller passed the submission (or a
+    near-duplicate of it) as the task description. Without this check,
+    misuse would leak the submission text to the provider."""
+    td = task_description.strip()
+    sub = submission.strip()
+    if not td or not sub:
+        return False
+    if td == sub:
+        return True
+    # Task descriptions are typically short (a sentence or two). If someone
+    # passes something that's a large fraction of the submission length,
+    # treat it as suspicious.
+    if len(td) >= max(250, int(len(sub) * 0.5)):
+        return True
+    # Or if the full task description appears verbatim inside the
+    # submission text (suggests the caller confused the fields).
+    if len(td) > 40 and td in sub:
+        return True
+    return False
+
+
 class ContrastiveGenDetector:
     id = "contrastive_gen"
     domain = "universal"
     compute_cost = "expensive"
+
+    def __init__(self):
+        # Cached sentence-transformers model, lazy-loaded on first embedding-
+        # similarity call. ~80 MB on disk; reloading per analyze would be
+        # gratuitous.
+        self._st_model = None
 
     def analyze(self, text: str, config: dict) -> LayerResult:
         task_description = config.get("task_description")
         if not task_description:
             return _skip(self, {"skipped": "no_task_metadata",
                                 "hint": "pass detectors.contrastive_gen.task_description (not the submission)"})
+        # Privacy guard: refuse to proceed if the caller confused the
+        # task_description and submission fields. Without this check, the
+        # submission text would be sent to the provider.
+        if _task_description_overlaps_submission(task_description, text):
+            return _skip(self, {
+                "skipped": "task_description_overlaps_submission",
+                "hint": "task_description must be a distinct, short task summary — "
+                        "never the submission text itself",
+            })
         provider = config.get("provider")
         if not provider:
             return _skip(self, {"skipped": "no_provider_configured"})
@@ -125,15 +162,14 @@ class ContrastiveGenDetector:
         similarities: list[float]
         if use_embeddings:
             try:
-                similarities = _embedding_similarity(valid, text)
+                similarities = self._embedding_similarity(valid, text)
                 similarity_mode = "embedding"
             except ImportError:
-                # Fall back to lexical; note in signals.
                 similarities = self._lexical_similarities(text, valid)
                 similarity_mode = "lexical_fallback"
             except Exception as e:
                 similarities = self._lexical_similarities(text, valid)
-                similarity_mode = f"lexical_fallback (embed error: {e})"
+                similarity_mode = f"lexical_fallback (embed error: {type(e).__name__})"
         else:
             similarities = self._lexical_similarities(text, valid)
 
@@ -177,6 +213,22 @@ class ContrastiveGenDetector:
         sub_shingles = _shingles(_tokenize(submission))
         return [_jaccard(sub_shingles, _shingles(_tokenize(b))) for b in baselines]
 
+    def _embedding_similarity(self, texts: list[str], submission: str) -> list[float]:
+        """Cosine similarity via sentence-transformers. Model is cached on
+        the instance so we don't reload 80MB on every analyze."""
+        if self._st_model is None:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+            self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
+        from sentence_transformers import util  # type: ignore
+        sub_emb = self._st_model.encode(
+            [submission], convert_to_tensor=True, normalize_embeddings=True
+        )
+        base_emb = self._st_model.encode(
+            texts, convert_to_tensor=True, normalize_embeddings=True
+        )
+        sims = util.cos_sim(sub_emb, base_emb)[0].tolist()
+        return [max(0.0, min(1.0, s)) for s in sims]
+
     def _generate_baselines(
         self, task_description: str, api_key: str, provider: str, model: str, n: int,
     ) -> tuple[list[str], list[str]]:
@@ -205,9 +257,9 @@ class ContrastiveGenDetector:
                         )
                         baselines.append(msg.content[0].text)
                     except Exception as e:
-                        errors.append(f"baseline {i}: {e}")
+                        errors.append(f"baseline {i}: {_sanitize_provider_error(e, api_key)}")
             except Exception as e:
-                errors.append(f"client init failed: {e}")
+                errors.append(f"client init failed: {_sanitize_provider_error(e, api_key)}")
         elif provider == "openai":
             try:
                 from openai import OpenAI  # type: ignore
@@ -224,9 +276,9 @@ class ContrastiveGenDetector:
                         )
                         baselines.append(resp.choices[0].message.content or "")
                     except Exception as e:
-                        errors.append(f"baseline {i}: {e}")
+                        errors.append(f"baseline {i}: {_sanitize_provider_error(e, api_key)}")
             except Exception as e:
-                errors.append(f"client init failed: {e}")
+                errors.append(f"client init failed: {_sanitize_provider_error(e, api_key)}")
         else:
             errors.append(f"unknown provider {provider!r}")
         return baselines, errors

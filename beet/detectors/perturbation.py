@@ -40,9 +40,16 @@ except ImportError:
 # [0, 0.2] for LLM text and near 0 for human — this mapping approximates
 # that operating range but will need isotonic calibration for real use.
 _HEURISTIC_Z_TO_P_LLM = [
-    (0.0, 0.10), (0.5, 0.25), (1.0, 0.45),
+    (-3.0, 0.02), (-1.0, 0.05), (0.0, 0.10),
+    (0.5, 0.25), (1.0, 0.45),
     (2.0, 0.65), (3.0, 0.80), (5.0, 0.92),
 ]
+
+# Perturbations that all land at nearly the same log-prob as the original
+# produce near-zero variance; dividing by that variance blows up z even for
+# tiny numerator differences. Below this variance floor we abstain rather
+# than report a pegged-RED verdict on noise.
+_MIN_PERTURBATION_VARIANCE = 1e-4
 
 
 def _interpolate(x: float, table: list[tuple[float, float]]) -> float:
@@ -69,12 +76,13 @@ class PerturbationDetector:
         self._loaded_model_name: str | None = None
 
     def _ensure_loaded(self, model_name: str, device: str) -> None:
-        if self._model is not None and self._loaded_model_name == model_name:
+        key = (model_name, device)
+        if self._model is not None and self._loaded_model_name == key:
             return
         self._tokenizer = AutoTokenizer.from_pretrained(model_name)
         self._model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
         self._model.eval()
-        self._loaded_model_name = model_name
+        self._loaded_model_name = key
 
     def _log_prob(self, text: str, device: str) -> float:
         """Mean per-token log-prob of `text` under the loaded LM."""
@@ -135,13 +143,24 @@ class PerturbationDetector:
         # Classic DetectGPT signal: normalized log-prob drop.
         mean_pert = sum(perturbed_lps) / len(perturbed_lps)
         var_pert = sum((p - mean_pert) ** 2 for p in perturbed_lps) / len(perturbed_lps)
-        std_pert = math.sqrt(var_pert) if var_pert > 0 else 1e-6
+        if var_pert < _MIN_PERTURBATION_VARIANCE:
+            # Perturbations clustered too tightly to get a meaningful z-score.
+            # Abstaining beats reporting a pegged value driven by numerical noise.
+            return _skip(self, {
+                "skipped": "insufficient_perturbation_variance",
+                "var_pert": var_pert,
+                "n_perturbations": n_perturbations,
+                "hint": "too few unique perturbations for a stable z-score; "
+                        "try a longer text or a higher perturbation_rate",
+            })
+        std_pert = math.sqrt(var_pert)
         # Z-score of original vs perturbed distribution — positive means the
         # original is higher log-prob than its perturbations, consistent
-        # with sitting near a local maximum (LLM-like).
+        # with sitting near a local maximum (LLM-like). Negative z is kept
+        # (it's evidence for human authorship) and mapped through the table.
         z = (original_lp - mean_pert) / std_pert
         raw = float(z)
-        p_llm = _interpolate(max(z, 0.0), _HEURISTIC_Z_TO_P_LLM)
+        p_llm = _interpolate(z, _HEURISTIC_Z_TO_P_LLM)
 
         if p_llm >= 0.75:
             determination = "RED"

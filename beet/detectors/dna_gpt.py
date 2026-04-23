@@ -46,6 +46,20 @@ def _resolve_api_key(config: dict, provider: str) -> str | None:
     return env or None
 
 
+def _sanitize_provider_error(exc: Exception, api_key: str | None = None) -> str:
+    """Trim exception strings so the error signal doesn't leak submission
+    text (request bodies) or the API key into the logs / history / UI."""
+    msg = f"{type(exc).__name__}"
+    detail = str(exc)
+    if detail:
+        # Drop the key if the SDK embedded it in an error string.
+        if api_key and api_key in detail:
+            detail = detail.replace(api_key, "[redacted]")
+        detail = detail[:200]
+        msg = f"{msg}: {detail}"
+    return msg
+
+
 class DNAGPTDetector:
     id = "dna_gpt"
     domain = "prose"
@@ -66,6 +80,7 @@ class DNAGPTDetector:
 
         provider_errors: list[str] = []
         bscores: dict[float, float] = {}
+        succeeded: dict[float, bool] = {}
         for frac in (0.30, 0.50, 0.70):
             cut = int(len(words) * frac)
             prefix = " ".join(words[:cut])
@@ -73,16 +88,28 @@ class DNAGPTDetector:
             generated, err = self._generate_continuation(prefix, api_key, provider, model)
             if err:
                 provider_errors.append(f"{frac}: {err}")
-            bscores[frac] = _bscore(actual_continuation, generated) if generated else 0.0
+                succeeded[frac] = False
+                bscores[frac] = 0.0
+            else:
+                succeeded[frac] = True
+                bscores[frac] = _bscore(actual_continuation, generated) if generated else 0.0
 
-        # If every call failed, return SKIP with the reason surfaced.
-        if provider_errors and all(v == 0.0 for v in bscores.values()):
+        ok_fracs = [f for f, ok in succeeded.items() if ok]
+        if not ok_fracs:
             return _skip(self, signals={"skipped": "provider_error", "errors": provider_errors})
 
+        # Compute mean/trend only over successful calls. A partial outage
+        # must not flip the verdict by treating a failed call as b=0.0.
+        ok_bscores = [bscores[f] for f in ok_fracs]
+        mean_bscore = sum(ok_bscores) / len(ok_bscores)
+        # Trend requires both the first and last fractions to have succeeded;
+        # otherwise it's not meaningful. Set to 0 (no bias) when incomplete.
+        if succeeded[0.30] and succeeded[0.70]:
+            bscore_trend = (bscores[0.70] - bscores[0.30]) / 2
+        else:
+            bscore_trend = 0.0
+        bscore_variance = sum((b - mean_bscore) ** 2 for b in ok_bscores) / len(ok_bscores)
         b30, b50, b70 = bscores[0.30], bscores[0.50], bscores[0.70]
-        bscore_trend = (b70 - b30) / 2
-        mean_bscore = (b30 + b50 + b70) / 3
-        bscore_variance = sum((b - mean_bscore) ** 2 for b in (b30, b50, b70)) / 3
 
         # HEURISTIC scoring — combine mean overlap with increasing trend.
         # Tuned against the DNA-GPT paper's operating range, NOT empirically
@@ -144,7 +171,7 @@ class DNAGPTDetector:
                 )
                 return msg.content[0].text, None
             except Exception as e:
-                return "", f"anthropic call failed: {e}"
+                return "", _sanitize_provider_error(e, api_key)
         if provider == "openai":
             try:
                 from openai import OpenAI  # type: ignore
@@ -158,7 +185,7 @@ class DNAGPTDetector:
                 )
                 return resp.choices[0].message.content or "", None
             except Exception as e:
-                return "", f"openai call failed: {e}"
+                return "", _sanitize_provider_error(e, api_key)
         return "", f"unknown provider {provider!r}"
 
     def calibrate(self, labeled_data: list) -> None:

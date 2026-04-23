@@ -45,20 +45,38 @@ def test_high_bscore_gives_high_p_llm(detector):
 
 
 def test_provider_errors_surface_partial_on_mixed(detector):
-    # First call errors, remaining succeed — result should fuse the good ones
-    # and surface the partial error in signals rather than SKIPping.
-    def fake_gen(self_arg, *a, **k):
-        fake_gen.calls += 1
-        if fake_gen.calls == 1:
-            return "", "rate limit"
-        return "partial continuation text works ok", None
-    fake_gen.calls = 0
+    """First call errors, the other two succeed with continuations that
+    actually overlap the real text. Result must fuse only the successful
+    calls and surface the partial error without SKIPping."""
+    from tests.fixtures.llm_samples import A0_CLINICAL_TASK
 
-    with patch.object(detector, "_generate_continuation",
-                       side_effect=lambda *a, **k: fake_gen(detector, *a, **k)):
-        from tests.fixtures.llm_samples import A0_CLINICAL_TASK
+    # Pick continuation text that has real n-gram overlap with the actual
+    # continuation of A0_CLINICAL_TASK so bscore > 0 on the successful calls.
+    words = A0_CLINICAL_TASK.split()
+    cut_50 = int(len(words) * 0.50)
+    overlapping = " ".join(words[cut_50:cut_50 + 50])
+
+    calls = {"n": 0}
+
+    def fake_gen(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "", "rate limit"
+        return overlapping, None
+
+    with patch.object(detector, "_generate_continuation", side_effect=fake_gen):
         result = detector.analyze(A0_CLINICAL_TASK, {"api_key": "test_key"})
-    assert result.determination != "SKIP" or "provider_error" in str(result.signals.get("skipped", ""))
+
+    assert result.determination != "SKIP", (
+        "expected partial recovery but got SKIP: " + str(result.signals)
+    )
+    # The partial error must be surfaced in signals so operators can see
+    # reduced coverage, but the determination is still produced.
+    assert "provider_errors_partial" in result.signals
+    assert result.signals["provider_errors_partial"] == ["0.3: rate limit"]
+    # Trend must not be biased by the failed call (b30 was not treated as 0).
+    # We don't assert a specific value, just that the field exists.
+    assert "bscore_trend" in result.signals
 
 
 def test_all_provider_errors_yields_skip(detector):

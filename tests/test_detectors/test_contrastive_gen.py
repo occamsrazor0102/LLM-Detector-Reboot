@@ -116,6 +116,32 @@ def test_all_baseline_errors_yields_skip(detector):
     assert r.signals.get("skipped") == "provider_error"
 
 
+def test_skips_when_task_description_equals_submission(detector):
+    """Privacy guard: if the caller passes the submission as the task
+    description, refuse — otherwise the submission would ship to the provider."""
+    submission = "This is the user's actual submission text " * 6  # 48 words
+    r = detector.analyze(
+        submission,
+        {"task_description": submission, "provider": "anthropic", "api_key": "k"},
+    )
+    assert r.determination == "SKIP"
+    assert r.signals.get("skipped") == "task_description_overlaps_submission"
+
+
+def test_skips_when_task_description_is_long_prefix_of_submission(detector):
+    """Task descriptions are short by convention; a too-long task_description
+    is a misuse signal."""
+    submission = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z " * 4
+    # A long task_description (~200 chars) that's also a prefix of submission.
+    td = submission[:300]
+    r = detector.analyze(
+        submission,
+        {"task_description": td, "provider": "anthropic", "api_key": "k"},
+    )
+    assert r.determination == "SKIP"
+    assert r.signals.get("skipped") == "task_description_overlaps_submission"
+
+
 def test_never_sends_submission_to_provider(detector):
     """Safety: _generate_baselines must receive the task description,
     never the submission text."""

@@ -91,14 +91,52 @@ def test_perturbation_with_stub_scorer_produces_layer_result(detector):
     import beet.detectors.perturbation as mod
 
     with patch.object(mod, "_HAS_TORCH", True):
-        # Stub model-load and scoring.
         with patch.object(detector, "_ensure_loaded", return_value=None), \
              patch.object(detector, "_log_prob") as mock_lp:
-            # Original text scores much higher than perturbations — looks LLM-like.
-            mock_lp.side_effect = [-1.0] + [-3.0, -3.1, -2.9, -3.2, -3.0, -2.8, -3.1, -3.0]
+            # Original scores much higher than perturbations — LLM-like.
+            # Perturbations spread across a meaningful range so the variance
+            # stays above the abstention floor.
+            mock_lp.side_effect = [-1.0, -3.0, -3.5, -2.5, -4.0, -3.0, -2.0, -3.5, -3.0]
             r = detector.analyze(long_text, {"n_perturbations": 8})
 
     assert r.determination in ("GREEN", "YELLOW", "AMBER", "RED")
     assert "z_score" in r.signals
-    assert r.signals["z_score"] > 0  # original above mean perturbed
+    assert r.signals["z_score"] > 0
     assert r.signals["n_perturbations"] == 8
+
+
+def test_perturbation_skips_on_degenerate_variance(detector):
+    """If every perturbation lands at the same log-prob, the z-score is
+    ill-defined — abstain rather than emit a pegged-RED on noise."""
+    long_text = " ".join(["token"] * 200)
+
+    import beet.detectors.perturbation as mod
+
+    with patch.object(mod, "_HAS_TORCH", True):
+        with patch.object(detector, "_ensure_loaded", return_value=None), \
+             patch.object(detector, "_log_prob") as mock_lp:
+            # All perturbations identical → variance = 0.
+            mock_lp.side_effect = [-1.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0]
+            r = detector.analyze(long_text, {"n_perturbations": 8})
+
+    assert r.determination == "SKIP"
+    assert r.signals.get("skipped") == "insufficient_perturbation_variance"
+
+
+def test_perturbation_negative_z_maps_below_prior(detector):
+    """Original text with log-prob below the perturbation mean is weak
+    evidence of human authorship — p_llm should land below the default 0.10."""
+    long_text = " ".join(["token"] * 200)
+
+    import beet.detectors.perturbation as mod
+
+    with patch.object(mod, "_HAS_TORCH", True):
+        with patch.object(detector, "_ensure_loaded", return_value=None), \
+             patch.object(detector, "_log_prob") as mock_lp:
+            # Original is the LOWEST log-prob in the set — negative z.
+            mock_lp.side_effect = [-5.0, -2.0, -2.5, -1.5, -3.0, -2.0, -1.0, -2.5, -2.0]
+            r = detector.analyze(long_text, {"n_perturbations": 8})
+
+    assert r.determination != "SKIP"
+    assert r.signals["z_score"] < 0
+    assert r.p_llm < 0.10
