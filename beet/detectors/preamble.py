@@ -2,7 +2,9 @@ import re
 from beet.contracts import LayerResult
 from beet.config import get_pattern_list
 
-_SEVERITY_P_LLM = {"CRITICAL": 0.97, "HIGH": 0.82, "MEDIUM": 0.65, "LOW": 0.30, "NONE": 0.05}
+# HEURISTIC severity → p(LLM) table. Hand-picked — NOT calibrated against
+# a labeled dataset. Replace once training data exists.
+_SEVERITY_HEURISTIC_P_LLM = {"CRITICAL": 0.97, "HIGH": 0.82, "MEDIUM": 0.65, "LOW": 0.30, "NONE": 0.05}
 
 def _compile_patterns(patterns: dict) -> list[tuple[str, re.Pattern, str]]:
     compiled = []
@@ -41,7 +43,7 @@ class PreambleDetector:
                     "kind": "preamble",
                     "note": f"preamble pattern '{name}' ({severity})",
                 })
-        p_llm = _SEVERITY_P_LLM[matched_severity]
+        p_llm = _SEVERITY_HEURISTIC_P_LLM[matched_severity]
         if matched_severity == "CRITICAL": determination = "RED"
         elif matched_severity == "HIGH": determination = "AMBER"
         elif matched_severity in ("MEDIUM", "LOW"): determination = "YELLOW"

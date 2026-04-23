@@ -2,7 +2,13 @@ import re
 from beet.contracts import LayerResult
 from beet.config import get_pattern_list
 
-_CALIBRATION = [(0.0, 0.05), (2.0, 0.25), (5.0, 0.45), (8.0, 0.60), (12.0, 0.75), (18.0, 0.85), (25.0, 0.93)]
+# HEURISTIC mapping from fingerprint hits-per-1000 to p(LLM). Hand-picked
+# piecewise-linear table — NOT derived from a labeled dataset. Replace with
+# isotonic calibration from beet.calibration once a training set exists.
+_HEURISTIC_P_LLM_MAPPING = [
+    (0.0, 0.05), (2.0, 0.25), (5.0, 0.45), (8.0, 0.60),
+    (12.0, 0.75), (18.0, 0.85), (25.0, 0.93),
+]
 
 def _interpolate(x: float, table: list[tuple[float, float]]) -> float:
     if x <= table[0][0]: return table[0][1]
@@ -55,7 +61,7 @@ class FingerprintVocabDetector:
                     "note": f"fingerprint bigram '{bigram}'",
                 })
         hits_per_1000 = (len(matched_words) + bigram_hits * 1.5) / word_count * 1000
-        p_llm = _interpolate(hits_per_1000, _CALIBRATION)
+        p_llm = _interpolate(hits_per_1000, _HEURISTIC_P_LLM_MAPPING)
         if p_llm >= 0.75: determination = "RED"
         elif p_llm >= 0.50: determination = "AMBER"
         elif p_llm >= 0.25: determination = "YELLOW"

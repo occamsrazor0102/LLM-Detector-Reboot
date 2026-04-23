@@ -47,7 +47,7 @@ For the Tauri desktop shell, see `docs/building.md`.
 
 ## Tests
 
-`pytest` with ~310 tests across:
+`pytest` against ~35 test files across:
 
 - `tests/test_contracts.py` — dataclass shapes
 - `tests/test_detectors/` — one file per detector

@@ -8,7 +8,9 @@ _IMPERATIVE_RE = re.compile(
     r"justify|document|perform|conduct|apply|use|select|choose)\b", re.IGNORECASE)
 _CONDITIONAL_RE = re.compile(r"\b(?:if|when|where|unless|until|provided that|assuming that|given that)\b", re.IGNORECASE)
 _BINARY_RE = re.compile(r"\b(?:yes or no|true or false|correct or incorrect|pass or fail)\b", re.IGNORECASE)
-_IDI_TO_P_LLM = [(0.0, 0.05), (3.0, 0.20), (6.0, 0.40), (9.0, 0.60), (12.0, 0.75), (16.0, 0.87), (22.0, 0.93)]
+# HEURISTIC mapping from IDI score to p(LLM). Hand-picked table — NOT from
+# a labeled dataset. Replace via beet.calibration once a training set exists.
+_IDI_HEURISTIC_P_LLM = [(0.0, 0.05), (3.0, 0.20), (6.0, 0.40), (9.0, 0.60), (12.0, 0.75), (16.0, 0.87), (22.0, 0.93)]
 
 def _interpolate(x, table):
     if x <= table[0][0]: return table[0][1]
@@ -42,7 +44,7 @@ class InstructionDensityDetector:
             spans.append({"start": m.start(), "end": m.end(), "kind": "instruction",
                           "note": f"binary spec '{m.group(0)}'"})
         idi = (imperatives + conditionals * 0.5 + binary * 2.0) / word_count * 100
-        p_llm = _interpolate(idi, _IDI_TO_P_LLM)
+        p_llm = _interpolate(idi, _IDI_HEURISTIC_P_LLM)
         if p_llm >= 0.75: determination = "RED"
         elif p_llm >= 0.50: determination = "AMBER"
         elif p_llm >= 0.25: determination = "YELLOW"

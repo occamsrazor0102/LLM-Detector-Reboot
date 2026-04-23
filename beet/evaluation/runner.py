@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Protocol
+
+log = logging.getLogger("beet.evaluation.runner")
 
 from beet.contracts import Determination
 from beet.evaluation.dataset import EvalSample
@@ -67,6 +70,9 @@ def run_eval(
         try:
             det = pipeline.analyze(sample.text)
         except Exception as exc:
+            # Full traceback at DEBUG — evaluation is exactly when you want
+            # to see detector crashes, not just a summary message.
+            log.debug("run_eval: sample %r failed", sample.id, exc_info=True)
             failed.append({"id": sample.id, "error": str(exc)})
             continue
         predictions.append({

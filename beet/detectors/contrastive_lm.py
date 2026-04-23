@@ -43,8 +43,9 @@ class ContrastiveLMDetector:
         self._tokenizer_b = AutoTokenizer.from_pretrained(model_b)
         self._model_b = AutoModelForCausalLM.from_pretrained(model_b).to(device)
         self._model_b.eval()
-        # Empirical calibration: human ratio ~1.0, LLM ratio <0.95 or >1.05
-        # These are initial estimates — use calibrate() to refine.
+        # HEURISTIC priors (NOT empirically calibrated): human ratio ~1.0,
+        # LLM ratio <0.95 or >1.05. These are hand-picked starting points.
+        # Call calibrate() with a labeled dataset to replace them.
         self._human_mean = 1.0
         self._human_std = 0.08
 

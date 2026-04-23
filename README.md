@@ -123,9 +123,12 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Around 310 tests covering contracts, detectors, router, cascade,
+~35 test files covering contracts, detectors, router, cascade,
 fusion, decision, calibration, evaluation, monitoring, privacy,
-provenance, history, the HTTP API, and the sidecar RPC.
+provenance, history, the HTTP API, and the sidecar RPC. These are
+structural tests (did the field land in the report, did the RPC
+round-trip, does this detector fire on this fixture) — they are not
+a substitute for an external benchmark.
 
 ## Development loop
 
@@ -136,17 +139,54 @@ so frontend iteration is a browser refresh.
 For backend changes, restart `beet gui`. The stdio sidecar is
 restarted by the Tauri shell on relaunch.
 
-## Limitations
+## Limitations — read before deploying
 
-- Tier-3 detectors (`contrastive_gen`, `dna_gpt`) require API
-  credentials (`pip install -e ".[tier3]"` plus env vars).
-- `run_eval` inside the GUI is capped at 1000 samples; larger runs
-  should drop to the Python module (`beet.evaluation.runner.run_eval`).
-- DriftMonitor observations are in-memory — the baseline is rebuilt
+Be honest with yourself about what BEET actually is today. The
+architecture is sound, but several pieces of the "calibrated
+probability" UX are held up by hand-picked heuristics:
+
+- **Fusion is not trained.** Out of the box, `EBMFusion` falls back to
+  naive weighted-mean aggregation across detector `p_llm` values. The
+  EBM training script exists (`scripts/train_fusion.py`) but a
+  trained artifact is not shipped and no dataset is checked in.
+  The `/health` endpoint reports `calibration_status: "heuristic"` in
+  this mode and the GUI shows a banner to say so.
+- **Per-detector `p_llm` mappings are hand-picked, not calibrated.**
+  The lookup tables in `preamble`, `fingerprint_vocab`,
+  `instruction_density`, `contrastive_lm` etc. are seeded with plausible
+  values, not derived from a labeled dataset. Their module-level names
+  use `HEURISTIC_*` to make this explicit. Use `DetectorCalibrator`
+  (`beet/calibration.py`) with a real dataset to replace them.
+- **Conformal prediction is approximate.** The current
+  `ConformalWrapper` maps fusion scores to four severity bands via a
+  midpoint heuristic. This does NOT preserve marginal coverage; the
+  CI in the UI should be read as an uncertainty cue, not a
+  frequentist guarantee. Replacing this with a proper split-conformal
+  implementation is on the roadmap.
+- **Four detectors are stubs without extras.** `contrastive_gen`,
+  `dna_gpt`, and `perturbation` return `SKIP` without API keys;
+  `contributor_graph` is batch-only and returns `SKIP` on single
+  inputs. In a typical single-text analyze call you get 8–10 active
+  detectors, not 16.
+- **No public benchmark.** BEET has not been evaluated on HC3, RAID,
+  or any other standard human-vs-LLM dataset. The unit tests verify
+  internal contracts; they do not establish external correctness.
+- **Regression tests encode the heuristic thresholds, not ground
+  truth.** `test_regression.py` asserts e.g. `p_llm >= 0.75` for A0
+  preamble text — which passes because a hand-picked table maps
+  `CRITICAL → 0.97`. These tests are consistency checks, not
+  accuracy measurements.
+- **Tier-3 detectors require API credentials.** `pip install -e ".[tier3]"` plus provider env vars.
+- **`run_eval` inside the GUI is capped at 1000 samples.** Drop to
+  `beet.evaluation.runner.run_eval` in Python for larger runs.
+- **DriftMonitor observations are in-memory.** Baselines are rebuilt
   from the persistent history store on demand, but the current window
   is lost on sidecar restart.
-- Trained fusion / calibration artifacts are referenced by config but
-  not checked into the repo. See `scripts/` for training recipes.
+
+If you're considering deploying this somewhere users will see the
+verdicts: at minimum, train the fusion on a labeled dataset, replace
+the heuristic detector tables with isotonic calibration, and pick one
+public benchmark (HC3 or RAID) as a sanity check.
 
 ## License
 

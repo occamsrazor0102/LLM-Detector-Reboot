@@ -70,6 +70,9 @@ def test_health_reports_history_enabled(server):
     assert body["status"] == "ok"
     assert body["history_enabled"] is True
     assert body["profile"] == "screening"
+    # Without a trained fusion model the system runs in heuristic mode.
+    # The UI relies on this field to show the "untrained" banner.
+    assert body["calibration_status"] in ("heuristic", "fusion-only", "calibrated")
 
 
 def test_index_served(server):

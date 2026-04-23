@@ -85,6 +85,7 @@ def test_health_reports_history_flag_and_profile(sidecar):
     h = sc.handle("health", {})
     assert h["history_enabled"] is True
     assert h["profile"] == "screening"
+    assert h["calibration_status"] in ("heuristic", "fusion-only", "calibrated")
 
 
 def test_feedback_also_writes_history_feedback(sidecar):

@@ -285,7 +285,13 @@
   <span class="sub">LLM Authorship Detection</span>
   <span class="mode" id="modeIndicator"></span>
   <span class="mode" id="profileIndicator"></span>
+  <span class="mode" id="calibrationIndicator" style="margin-left:auto;"></span>
 </header>
+<div id="heuristicBanner" hidden style="background:rgba(228,163,58,0.15);border-bottom:1px solid rgba(228,163,58,0.4);color:var(--ink);padding:8px 24px;font-size:12px;">
+  <strong>Heuristic mode</strong> — no trained fusion model or conformal calibrator loaded.
+  P(LLM) values and confidence intervals come from hand-picked thresholds, not from a labeled dataset.
+  Treat verdicts as directional, not calibrated probabilities.
+</div>
 <nav class="tabs" role="tablist">
   <button data-tab="analyze" aria-selected="true">Analyze</button>
   <button data-tab="batch">Batch</button>
@@ -1523,6 +1529,19 @@ async function refreshProfileIndicator() {
     const h = await beetApi.health();
     _currentProfile = h.profile || null;
     $("profileIndicator").textContent = _currentProfile ? `profile: ${_currentProfile}` : "";
+    const cal = h.calibration_status || (h.model_loaded ? "fusion-only" : "heuristic");
+    const calEl = $("calibrationIndicator");
+    if (cal === "calibrated") {
+      calEl.textContent = "calibrated";
+      calEl.style.color = "var(--green)";
+    } else if (cal === "fusion-only") {
+      calEl.textContent = "fusion-only (no conformal)";
+      calEl.style.color = "var(--amber)";
+    } else {
+      calEl.textContent = "heuristic (untrained)";
+      calEl.style.color = "var(--amber)";
+    }
+    $("heuristicBanner").hidden = cal !== "heuristic";
   } catch { /* swallow */ }
 }
 refreshProfileIndicator();

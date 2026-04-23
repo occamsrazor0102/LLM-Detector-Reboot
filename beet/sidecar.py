@@ -347,10 +347,19 @@ class Sidecar:
 
     def _health(self) -> dict:
         fusion = self._pipeline._fusion
+        model_loaded = fusion._model is not None
+        conformal_loaded = fusion._conformal is not None
+        if model_loaded and conformal_loaded:
+            cal_status = "calibrated"
+        elif model_loaded:
+            cal_status = "fusion-only"  # trained fusion but no conformal
+        else:
+            cal_status = "heuristic"  # no trained model; naive fallback, hand-picked thresholds
         return {
             "status": "ok",
-            "model_loaded": fusion._model is not None,
-            "conformal_loaded": fusion._conformal is not None,
+            "model_loaded": model_loaded,
+            "conformal_loaded": conformal_loaded,
+            "calibration_status": cal_status,
             "protocol_version": PROTOCOL_VERSION,
             "history_enabled": self._history is not None,
             "profile": self._profile,

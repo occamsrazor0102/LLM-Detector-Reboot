@@ -126,20 +126,37 @@ short-circuit logic driven by configurable thresholds
 `phase3_always_run: true` forces every detector regardless of
 intermediate confidence — useful for evaluation.
 
-## Fusion (EBM)
+## Fusion
 
-`beet/fusion/ebm.py::EBMFusion` takes the list of `LayerResult`s,
-builds a feature vector (per-detector `p_llm` × weight, plus a few
-derived features like detectors-active count), and asks an Explainable
-Boosting Machine for:
+`beet/fusion/ebm.py::EBMFusion` has two modes:
 
-1. A fused `p_llm`
-2. Per-feature contributions (additive, interpretable)
-3. A prediction set via conformal prediction (`beet/fusion/conformal.py`)
+- **Naive weighted mean (default).** If no trained model artifact is
+  loaded (controlled by `fusion.model_path` in the active config), the
+  fusion returns a weighted mean of per-detector `p_llm` values and
+  reports per-detector deviations from prior (`(p_llm - 0.5) *
+  confidence`) as pseudo-contributions. This is the mode every
+  out-of-the-box deployment runs in. `/health` reports
+  `calibration_status: "heuristic"` to signal this, and the GUI shows
+  a banner.
+- **EBM (when trained).** If a fitted Explainable Boosting Machine is
+  loaded via `fusion.model_path`, the fusion builds a feature vector
+  (per-detector `p_llm` × weight, plus a few derived features like
+  detectors-active count), gets a fused `p_llm` and additive feature
+  contributions, and optionally a conformal prediction set if
+  `fusion.conformal_path` is also loaded.
 
-If no fusion model is loaded (common in development), the fusion falls
-back to a naive weighted mean — less accurate but deterministic and
-runnable without training.
+The prediction set / confidence-interval path in
+`beet/fusion/conformal.py::ConformalWrapper` maps fusion scores to
+four severity bands via a midpoint heuristic. This is NOT a coverage-
+guaranteeing conformal prediction — replacing it with a genuine split-
+conformal implementation (binary, with a documented post-hoc band
+mapping) is a known follow-up.
+
+Per-detector `p_llm` values themselves are also heuristic out of the
+box — each detector's `analyze()` runs a hand-picked piecewise-linear
+mapping (`_HEURISTIC_*` constants) from its raw score to a p(LLM).
+Replace with isotonic calibration via `beet.calibration.DetectorCalibrator`
+once a labeled dataset exists.
 
 ## Decision engine
 
