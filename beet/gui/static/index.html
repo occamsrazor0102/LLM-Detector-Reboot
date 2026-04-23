@@ -390,6 +390,15 @@
       <div id="monDetermBar"></div>
     </div>
     <div class="panel" style="margin-top:12px;">
+      <label>Drift</label>
+      <div class="actions" style="margin-top:4px;gap:12px;align-items:center;">
+        <span id="driftBaselineStatus" style="color:var(--muted);font-size:12px;">—</span>
+        <span id="driftObsStatus" style="color:var(--muted);font-size:12px;">—</span>
+        <button class="ghost" id="driftSetBaseline" style="margin-left:auto;">Set baseline from recent history</button>
+      </div>
+      <div id="driftAlerts" style="margin-top:8px;"></div>
+    </div>
+    <div class="panel" style="margin-top:12px;">
       <label>Per-day volume (last 14 days)</label>
       <svg id="monPerDay" width="100%" height="80" preserveAspectRatio="none"></svg>
     </div>
@@ -583,6 +592,8 @@ const beetApi = (() => {
       monitoringTimeline: (limit) => invoke("monitoring_timeline", { params: { limit: limit || 200 } }),
       monitoringDetectors: (limit) => invoke("monitoring_detectors", { params: { limit: limit || 500 } }),
       runEval: (items, max_samples) => invoke("run_eval", { params: { items, max_samples } }),
+      monitoringDrift: () => invoke("monitoring_drift", {}),
+      monitoringSetBaseline: (limit) => invoke("monitoring_set_baseline", { params: { limit: limit || 500 } }),
     };
   }
   const post = async (path, body) => {
@@ -618,6 +629,8 @@ const beetApi = (() => {
     monitoringTimeline: (limit) => post("/monitoring/timeline", { limit: limit || 200 }),
     monitoringDetectors: (limit) => post("/monitoring/detectors", { limit: limit || 500 }),
     runEval: (items, max_samples) => post("/evaluation/run", { items, max_samples }),
+    monitoringDrift: () => post("/monitoring/drift", {}),
+    monitoringSetBaseline: (limit) => post("/monitoring/set-baseline", { limit: limit || 500 }),
   };
 })();
 $("modeIndicator").textContent = beetApi.mode;
@@ -1069,21 +1082,68 @@ const DETERM_ORDER = ["RED", "AMBER", "YELLOW", "GREEN", "UNCERTAIN", "MIXED"];
 async function loadMonitoring() {
   $("monStatus").textContent = "Loading…";
   try {
-    const [summary, timeline, detectors] = await Promise.all([
+    const tasks = [
       beetApi.monitoringSummary(),
       beetApi.monitoringTimeline(200),
       beetApi.monitoringDetectors(500),
-    ]);
+      beetApi.monitoringDrift().catch(() => null),
+    ];
+    const [summary, timeline, detectors, drift] = await Promise.all(tasks);
     renderMonCards(summary);
     renderMonDetermBar(summary.by_determination || {});
     renderMonPerDay(summary.per_day || {});
     renderMonTimeline(timeline.items || []);
     renderMonDetectors(detectors.detectors || []);
+    renderDrift(drift);
     $("monStatus").textContent = "";
   } catch (e) {
     $("monStatus").textContent = "Error: " + (e.message || e);
   }
 }
+
+function renderDrift(d) {
+  if (!d) {
+    $("driftBaselineStatus").textContent = "drift monitor disabled";
+    $("driftObsStatus").textContent = "";
+    $("driftAlerts").innerHTML = "";
+    $("driftSetBaseline").disabled = true;
+    return;
+  }
+  $("driftSetBaseline").disabled = false;
+  if (d.has_baseline) {
+    $("driftBaselineStatus").innerHTML = `baseline: <span class="ink">set on ${(d.baseline_features || []).length} features</span>`;
+  } else {
+    $("driftBaselineStatus").innerHTML = `baseline: <span style="color:var(--amber)">not set</span>`;
+  }
+  $("driftObsStatus").textContent = `current window: ${d.n_observations} observations`;
+  const alerts = d.alerts || [];
+  if (!alerts.length) {
+    $("driftAlerts").innerHTML = `<div style="color:var(--muted);font-size:12px;">No active alerts.</div>`;
+  } else {
+    $("driftAlerts").innerHTML = alerts.map(a =>
+      `<div style="background:rgba(228,163,58,0.14);border:1px solid rgba(228,163,58,0.35);border-radius:4px;padding:6px 10px;font-size:12px;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace;">${escapeHtml(a)}</div>`
+    ).join("");
+  }
+}
+
+$("driftSetBaseline").addEventListener("click", async () => {
+  const btn = $("driftSetBaseline");
+  btn.disabled = true; const prev = btn.textContent; btn.textContent = "Setting baseline…";
+  try {
+    const res = await beetApi.monitoringSetBaseline(500);
+    if (res && res.ok) {
+      btn.textContent = `Baseline set (${res.n_samples} samples)`;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; loadMonitoring(); }, 900);
+      return;
+    } else {
+      btn.textContent = `No history available`;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1500);
+    }
+  } catch (e) {
+    btn.textContent = "Error: " + (e.message || e);
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+  }
+});
 
 $("monRefresh").addEventListener("click", loadMonitoring);
 

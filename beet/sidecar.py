@@ -37,9 +37,10 @@ from typing import Any
 
 from beet.config import list_profiles, load_config
 from beet.history import HistoryStore, mint_submission_id
+from beet.monitoring.drift import DriftMonitor
+from beet.monitoring.meta_detector import MetaDetector
 from beet.pipeline import BeetPipeline
 from beet.report import build_json_report
-from beet.monitoring.meta_detector import MetaDetector
 from beet.runtime import RuntimeContext
 
 
@@ -83,6 +84,37 @@ def _curated_config_view(profile: str | None, config: dict) -> dict:
             "db_path": history.get("db_path", "data/beet_history.sqlite3"),
         },
     }
+
+
+def drift_from_config(config: dict | None) -> DriftMonitor | None:
+    gui = (config or {}).get("gui") or {}
+    drift_cfg = gui.get("drift") or {}
+    if drift_cfg.get("enabled", True) is False:
+        return None
+    store_path = Path(drift_cfg.get("store_path", "data/drift_alerts"))
+    try:
+        return DriftMonitor(store_path, config or {})
+    except Exception as e:
+        log.warning("drift monitor disabled: %s", e)
+        return None
+
+
+def drift_baseline_from_history(
+    drift: DriftMonitor, history: HistoryStore, *, limit: int = 500
+) -> int:
+    """Pull feature_contributions from recent history, seed drift baseline."""
+    rows = history.list(limit=int(limit), offset=0)
+    feature_vectors: list[dict] = []
+    for item in rows.get("items", []):
+        sid = item["submission_id"]
+        got = history.get(sid)
+        if not got:
+            continue
+        fc = (got.get("report") or {}).get("feature_contributions") or {}
+        if fc:
+            feature_vectors.append(fc)
+    drift.set_baseline(feature_vectors)
+    return len(feature_vectors)
 
 
 def history_from_config(config: dict | None) -> HistoryStore | None:
@@ -175,6 +207,7 @@ class Sidecar:
         history: HistoryStore | None = None,
         profile: str | None = None,
         ctx: RuntimeContext | None = None,
+        drift: DriftMonitor | None = None,
     ):
         if ctx is None:
             if pipeline is None:
@@ -183,6 +216,7 @@ class Sidecar:
         self._ctx = ctx
         self._feedback_path = feedback_path or DEFAULT_FEEDBACK_PATH
         self._history = history
+        self._drift = drift
         self._meta = MetaDetector()
         self._running = True
 
@@ -225,6 +259,10 @@ class Sidecar:
             return self._monitoring_detectors(params)
         if method == "run_eval":
             return self._run_eval(params)
+        if method == "monitoring_drift":
+            return self._monitoring_drift()
+        if method == "monitoring_set_baseline":
+            return self._monitoring_set_baseline(params)
         if method == "shutdown":
             self._running = False
             return {"ok": True}
@@ -441,14 +479,53 @@ class Sidecar:
         text: str | None,
         batch_id: str | None = None,
     ) -> None:
+        if self._history is not None:
+            try:
+                self._history.record(
+                    report, source=source, text=text, profile=self._profile, batch_id=batch_id
+                )
+            except Exception as e:
+                log.warning("history write failed: %s", e)
+        if self._drift is not None:
+            try:
+                self._drift.record(
+                    p_llm=float(report.get("p_llm", 0.0)),
+                    determination=str(report.get("determination", "")),
+                    feature_vector=dict(report.get("feature_contributions") or {}),
+                )
+            except Exception as e:
+                log.warning("drift record failed: %s", e)
+
+    def _monitoring_drift(self) -> dict:
+        if self._drift is None:
+            raise SidecarError("ERR_DISABLED", "drift monitor is disabled in this config")
+        alerts = self._drift.check_drift()
+        summary = self._drift.get_summary()
+        has_baseline = bool(self._drift._baseline_hist)
+        baseline_features = list(self._drift._baseline_hist.keys())
+        return {
+            "has_baseline": has_baseline,
+            "baseline_features": baseline_features,
+            "n_observations": len(self._drift._observations),
+            "alerts": alerts,
+            "summary": summary,
+        }
+
+    def _monitoring_set_baseline(self, params: dict) -> dict:
+        if self._drift is None:
+            raise SidecarError("ERR_DISABLED", "drift monitor is disabled in this config")
         if self._history is None:
-            return
-        try:
-            self._history.record(
-                report, source=source, text=text, profile=self._profile, batch_id=batch_id
+            raise SidecarError(
+                "ERR_DISABLED",
+                "history is required to build a baseline; enable gui.history",
             )
-        except Exception as e:
-            log.warning("history write failed: %s", e)
+        limit = int(params.get("limit", 500))
+        n = drift_baseline_from_history(self._drift, self._history, limit=limit)
+        return {
+            "ok": n > 0,
+            "n_samples": n,
+            "baseline_features": list(self._drift._baseline_hist.keys()),
+        }
 
 
 def _write(obj: dict, stream=None) -> None:
@@ -465,6 +542,7 @@ def run(
     history: HistoryStore | None = None,
     profile: str | None = None,
     ctx: RuntimeContext | None = None,
+    drift: DriftMonitor | None = None,
 ) -> int:
     """Drive the JSON-RPC loop. Returns the process exit code."""
     stdin = stdin or sys.stdin
@@ -475,6 +553,7 @@ def run(
         history=history,
         profile=profile,
         ctx=ctx,
+        drift=drift,
     )
     _write({"event": "ready", "pid": os.getpid(), "protocol_version": PROTOCOL_VERSION}, stream=stdout)
 
@@ -557,9 +636,10 @@ def main(argv: list[str] | None = None) -> int:
     pipeline = BeetPipeline(config)
     feedback_path = Path(args.feedback_path)
     history = history_from_config(config)
+    drift = drift_from_config(config)
     ctx = RuntimeContext(pipeline, args.profile, config)
 
-    return run(feedback_path=feedback_path, history=history, ctx=ctx)
+    return run(feedback_path=feedback_path, history=history, ctx=ctx, drift=drift)
 
 
 if __name__ == "__main__":

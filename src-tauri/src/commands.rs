@@ -145,3 +145,18 @@ pub async fn run_eval(
 ) -> Result<Value, SidecarError> {
     manager.send_request("run_eval", params).await
 }
+
+#[tauri::command]
+pub async fn monitoring_drift(
+    manager: State<'_, Arc<SidecarManager>>,
+) -> Result<Value, SidecarError> {
+    manager.send_request("monitoring_drift", json!({})).await
+}
+
+#[tauri::command]
+pub async fn monitoring_set_baseline(
+    params: Value,
+    manager: State<'_, Arc<SidecarManager>>,
+) -> Result<Value, SidecarError> {
+    manager.send_request("monitoring_set_baseline", params).await
+}

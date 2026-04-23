@@ -11,6 +11,7 @@ import pytest
 from beet.config import load_config
 from beet.gui.server import _make_handler
 from beet.history import HistoryStore
+from beet.monitoring.drift import DriftMonitor
 from beet.monitoring.meta_detector import MetaDetector
 from beet.pipeline import BeetPipeline
 from beet.runtime import RuntimeContext
@@ -24,7 +25,11 @@ def server(tmp_path):
     meta = MetaDetector()
     feedback_path = tmp_path / "feedback.jsonl"
     history = HistoryStore(tmp_path / "history.sqlite3")
-    handler = _make_handler(meta=meta, feedback_path=feedback_path, history=history, ctx=ctx)
+    drift = DriftMonitor(tmp_path / "drift", cfg)
+    handler = _make_handler(
+        meta=meta, feedback_path=feedback_path,
+        history=history, ctx=ctx, drift=drift,
+    )
     httpd = HTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -245,6 +250,25 @@ def test_evaluation_run_cap_enforced(server):
     status, body = _post(url, "/evaluation/run", {"items": items, "max_samples": 3})
     assert status == 400
     assert body.get("code") == "ERR_TOO_LARGE"
+
+
+def test_monitoring_drift_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    status, body = _post(url, "/monitoring/drift", {})
+    assert status == 200
+    assert body["n_observations"] >= 1
+    assert isinstance(body["alerts"], list)
+
+
+def test_monitoring_set_baseline_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    _post(url, "/analyze", {"text": "another sample text for baseline seeding"})
+    status, body = _post(url, "/monitoring/set-baseline", {"limit": 10})
+    assert status == 200
+    assert body["ok"] is True and body["n_samples"] == 2
+    assert body["baseline_features"]
 
 
 def test_feedback_records_in_history(server):

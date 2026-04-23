@@ -104,3 +104,6 @@ gui:
     enabled: true
     db_path: data/beet_history.sqlite3
     retain_text: true
+  drift:
+    enabled: true
+    store_path: data/drift_alerts

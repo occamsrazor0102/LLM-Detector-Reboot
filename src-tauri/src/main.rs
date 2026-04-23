@@ -45,6 +45,8 @@ fn main() {
             commands::monitoring_timeline,
             commands::monitoring_detectors,
             commands::run_eval,
+            commands::monitoring_drift,
+            commands::monitoring_set_baseline,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

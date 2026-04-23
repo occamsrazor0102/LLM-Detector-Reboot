@@ -5,6 +5,7 @@ import pytest
 
 from beet.config import load_config
 from beet.history import HistoryStore
+from beet.monitoring.drift import DriftMonitor
 from beet.pipeline import BeetPipeline
 from beet.runtime import RuntimeContext
 from beet.sidecar import Sidecar, SidecarError
@@ -16,10 +17,12 @@ def sidecar(tmp_path):
     cfg = load_config(config_path)
     ctx = RuntimeContext(BeetPipeline(cfg), "screening", cfg)
     history = HistoryStore(tmp_path / "h.sqlite3")
+    drift = DriftMonitor(tmp_path / "drift", cfg)
     return Sidecar(
         ctx=ctx,
         feedback_path=tmp_path / "fb.jsonl",
         history=history,
+        drift=drift,
     ), history
 
 

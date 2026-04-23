@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from beet.config import list_profiles
 from beet.history import HistoryStore, mint_submission_id
+from beet.monitoring.drift import DriftMonitor
 from beet.monitoring.meta_detector import MetaDetector
 from beet.pipeline import BeetPipeline
 from beet.report import build_json_report
@@ -22,6 +23,8 @@ from beet.sidecar import (
     DEFAULT_FEEDBACK_PATH,
     SidecarError,
     _curated_config_view,
+    drift_baseline_from_history,
+    drift_from_config,
     record_feedback,
 )
 
@@ -50,6 +53,7 @@ def _make_handler(
     history: HistoryStore | None = None,
     profile: str | None = None,
     ctx: RuntimeContext | None = None,
+    drift: DriftMonitor | None = None,
 ):
     if ctx is None:
         if pipeline is None:
@@ -153,6 +157,10 @@ def _make_handler(
                 self._handle_monitoring_detectors(body)
             elif path == "/evaluation/run":
                 self._handle_run_eval(body)
+            elif path == "/monitoring/drift":
+                self._handle_monitoring_drift(body)
+            elif path == "/monitoring/set-baseline":
+                self._handle_monitoring_set_baseline(body)
             else:
                 self.send_error(404)
 
@@ -371,6 +379,43 @@ def _make_handler(
             result["duration_ms"] = int((time.monotonic() - t0) * 1000)
             self._send_json(200, result)
 
+        def _handle_monitoring_drift(self, body: dict) -> None:
+            if drift is None:
+                self._send_json(503, {"error": "drift monitor disabled"})
+                return
+            try:
+                alerts = drift.check_drift()
+                summary = drift.get_summary()
+                self._send_json(200, {
+                    "has_baseline": bool(drift._baseline_hist),
+                    "baseline_features": list(drift._baseline_hist.keys()),
+                    "n_observations": len(drift._observations),
+                    "alerts": alerts,
+                    "summary": summary,
+                })
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+
+        def _handle_monitoring_set_baseline(self, body: dict) -> None:
+            if drift is None:
+                self._send_json(503, {"error": "drift monitor disabled"})
+                return
+            if history is None:
+                self._send_json(503, {"error": "history required for baseline"})
+                return
+            limit = int(body.get("limit", 500))
+            try:
+                n = drift_baseline_from_history(drift, history, limit=limit)
+                self._send_json(200, {
+                    "ok": n > 0,
+                    "n_samples": n,
+                    "baseline_features": list(drift._baseline_hist.keys()),
+                })
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+
         def _record_history(
             self,
             report: dict,
@@ -379,14 +424,22 @@ def _make_handler(
             text: str | None,
             batch_id: str | None = None,
         ) -> None:
-            if history is None:
-                return
-            try:
-                history.record(
-                    report, source=source, text=text, profile=ctx.profile, batch_id=batch_id
-                )
-            except Exception as e:
-                sys.stderr.write(f"[gui] history write failed: {e}\n")
+            if history is not None:
+                try:
+                    history.record(
+                        report, source=source, text=text, profile=ctx.profile, batch_id=batch_id
+                    )
+                except Exception as e:
+                    sys.stderr.write(f"[gui] history write failed: {e}\n")
+            if drift is not None:
+                try:
+                    drift.record(
+                        p_llm=float(report.get("p_llm", 0.0)),
+                        determination=str(report.get("determination", "")),
+                        feature_vector=dict(report.get("feature_contributions") or {}),
+                    )
+                except Exception as e:
+                    sys.stderr.write(f"[gui] drift record failed: {e}\n")
 
         def _serve_static(self, name: str) -> None:
             path = STATIC_DIR / name
@@ -416,8 +469,9 @@ def serve(
     meta = MetaDetector()
     fp = feedback_path or DEFAULT_FEEDBACK_PATH
     history = _history_from_config(config)
+    drift = drift_from_config(config)
     ctx = RuntimeContext(pipeline, profile, config or {})
-    handler = _make_handler(meta=meta, feedback_path=fp, history=history, ctx=ctx)
+    handler = _make_handler(meta=meta, feedback_path=fp, history=history, ctx=ctx, drift=drift)
     httpd = HTTPServer((host, port), handler)
     url = f"http://{host}:{port}/"
     hist_status = "enabled" if history is not None else "disabled"
