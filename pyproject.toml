@@ -47,6 +47,7 @@ dev = [
 ]
 
 [project.scripts]
+beet = "beet.console:main"
 beet-sidecar = "beet.sidecar:main"
 
 [tool.pytest.ini_options]

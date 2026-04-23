@@ -74,12 +74,12 @@ This generates `src-tauri/icons/*.{png,icns,ico}` in all required sizes.
 
 macOS / Linux:
 ```bash
-export BEET_SIDECAR_CMD="python -m beet sidecar --profile default"
+export BEET_SIDECAR_CMD="python -m beet.sidecar --profile default"
 ```
 
 Windows (PowerShell):
 ```powershell
-$env:BEET_SIDECAR_CMD = "python -m beet sidecar --profile default"
+$env:BEET_SIDECAR_CMD = "python -m beet.sidecar --profile default"
 ```
 
 The Rust sidecar manager checks this env var first; if set, it uses it verbatim instead of looking for a bundled binary. (Whitespace-split — don't put paths with spaces in the command.)
