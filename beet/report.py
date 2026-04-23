@@ -11,6 +11,22 @@ def build_json_report(determination: Determination, submission_id: str = "") -> 
         "override_applied": determination.override_applied,
         "detectors_run": determination.detectors_run, "cascade_phases": determination.cascade_phases,
         "mixed_report": determination.mixed_report,
+        "layer_results": [
+            {
+                "layer_id": lr.layer_id,
+                "domain": lr.domain,
+                "raw_score": round(float(lr.raw_score), 4),
+                "p_llm": round(float(lr.p_llm), 4),
+                "confidence": round(float(lr.confidence), 4),
+                "determination": lr.determination,
+                "signals": lr.signals,
+                "compute_cost": lr.compute_cost,
+            }
+            for lr in determination.layer_results
+        ],
+        "feature_contributions": {
+            k: round(float(v), 4) for k, v in determination.feature_contributions.items()
+        },
     }
 
 def build_text_report(determination: Determination) -> str:

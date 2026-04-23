@@ -25,6 +25,12 @@ def test_determination_has_detectors_run(pipeline):
     det = pipeline.analyze(A0_CLINICAL_TASK)
     assert len(det.detectors_run) > 0
 
+def test_determination_has_layer_results_and_contributions(pipeline):
+    det = pipeline.analyze(A0_CLINICAL_TASK)
+    assert len(det.layer_results) == len(det.detectors_run)
+    assert all(lr.layer_id in det.detectors_run for lr in det.layer_results)
+    assert isinstance(det.feature_contributions, dict)
+
 def test_p_llm_is_between_0_and_1(pipeline):
     det = pipeline.analyze(A1_CLEANED)
     assert 0.0 <= det.p_llm <= 1.0

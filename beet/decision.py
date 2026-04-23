@@ -16,7 +16,9 @@ class DecisionEngine:
                 return Determination(label="RED", p_llm=fusion.p_llm, confidence_interval=fusion.confidence_interval,
                     prediction_set=["RED"], reason="Critical LLM preamble detected — raw assistant output present.",
                     top_features=list(fusion.top_contributors), override_applied=True,
-                    detectors_run=[r.layer_id for r in layer_results], cascade_phases=[], mixed_report=None)
+                    detectors_run=[r.layer_id for r in layer_results], cascade_phases=[], mixed_report=None,
+                    layer_results=list(layer_results),
+                    feature_contributions=dict(fusion.feature_contributions))
         if self._abstain and len(fusion.prediction_set) >= self._max_pred_set:
             label = "UNCERTAIN"
             reason = f"Prediction set spans {len(fusion.prediction_set)} severity bands ({', '.join(fusion.prediction_set)}). Human review recommended."
@@ -25,7 +27,9 @@ class DecisionEngine:
             reason = self._generate_reason(label, fusion)
         return Determination(label=label, p_llm=fusion.p_llm, confidence_interval=fusion.confidence_interval,
             prediction_set=fusion.prediction_set, reason=reason, top_features=list(fusion.top_contributors),
-            override_applied=False, detectors_run=[r.layer_id for r in layer_results], cascade_phases=[], mixed_report=None)
+            override_applied=False, detectors_run=[r.layer_id for r in layer_results], cascade_phases=[], mixed_report=None,
+            layer_results=list(layer_results),
+            feature_contributions=dict(fusion.feature_contributions))
 
     def _p_llm_to_label(self, p_llm: float) -> str:
         if p_llm >= self._red: return "RED"

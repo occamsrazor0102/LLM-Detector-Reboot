@@ -39,6 +39,8 @@ class Determination:
     detectors_run: list[str]
     cascade_phases: list[int]
     mixed_report: dict | None
+    layer_results: list[LayerResult] = field(default_factory=list)
+    feature_contributions: dict = field(default_factory=dict)
 
 @dataclass
 class RouterDecision:

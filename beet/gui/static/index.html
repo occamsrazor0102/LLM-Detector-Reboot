@@ -61,6 +61,68 @@
     .detectors { margin-top: 8px; font-size: 11px; color: var(--muted); }
     .pred-set { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
     .err { color: var(--red); margin-top: 10px; font-size: 13px; }
+    .feedback { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .feedback .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .feedback button.fb {
+      background: transparent; border: 1px solid var(--line); color: var(--ink);
+      padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;
+      cursor: pointer; margin-top: 0;
+    }
+    .feedback button.fb:hover { border-color: #1f6feb; }
+    .feedback button.fb.human { color: var(--green); }
+    .feedback button.fb.llm { color: var(--red); }
+    .feedback input {
+      flex: 1 1 180px; min-width: 0; background: #0b0f14;
+      border: 1px solid var(--line); color: var(--ink); border-radius: 4px;
+      padding: 6px 8px; font-size: 12px;
+    }
+    .feedback .status { color: var(--muted); font-size: 12px; min-height: 16px; }
+    .feedback .status.ok { color: var(--green); }
+    .feedback .status.err { color: var(--red); }
+    details.section { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+    details.section > summary {
+      cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.04em; list-style: none; user-select: none;
+    }
+    details.section > summary::-webkit-details-marker { display: none; }
+    details.section > summary::before {
+      content: "▸ "; display: inline-block; width: 14px;
+    }
+    details.section[open] > summary::before { content: "▾ "; }
+    table.layers { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    table.layers th {
+      text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px;
+      border-bottom: 1px solid var(--line); text-transform: none; letter-spacing: 0;
+    }
+    table.layers td {
+      padding: 4px 6px; border-bottom: 1px dashed var(--line); font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    table.layers tr.row { cursor: pointer; }
+    table.layers tr.row:hover td { background: #0b0f14; }
+    table.layers tr.sig td {
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+      color: var(--muted); background: #0b0f14; padding: 8px 12px; white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table.layers .badge { font-size: 11px; padding: 2px 6px; }
+    .contrib-row {
+      display: grid; grid-template-columns: 160px 1fr 56px; gap: 8px; align-items: center;
+      padding: 2px 0; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .contrib-row .name { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contrib-row .bar { height: 6px; background: #21262d; border-radius: 3px; position: relative; }
+    .contrib-row .bar .fill { position: absolute; top: 0; height: 100%; border-radius: 3px; }
+    .contrib-row .bar .fill.pos { background: #3e8cf8; left: 50%; }
+    .contrib-row .bar .fill.neg { background: #d1495b; right: 50%; }
+    .contrib-row .bar .axis { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: var(--line); }
+    .contrib-row .val { text-align: right; color: var(--muted); }
+    .sort-controls { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+    .sort-controls button {
+      background: transparent; border: 1px solid var(--line); color: var(--muted);
+      padding: 3px 8px; font-size: 11px; border-radius: 3px; cursor: pointer; margin: 0;
+      font-weight: normal;
+    }
+    .sort-controls button.active { color: var(--ink); border-color: #1f6feb; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -90,11 +152,83 @@
       <label>Top contributing signals</label>
       <div id="contribs"></div>
     </div>
+    <details class="section" id="layersSection">
+      <summary>Detector breakdown</summary>
+      <table class="layers"><thead><tr>
+        <th>id</th><th>domain</th><th style="text-align:right">raw</th>
+        <th style="text-align:right">p(llm)</th><th style="text-align:right">conf</th>
+        <th>verdict</th>
+      </tr></thead><tbody id="layersBody"></tbody></table>
+    </details>
+    <details class="section" id="allContribsSection">
+      <summary>All feature contributions</summary>
+      <div class="sort-controls" id="sortControls">
+        <button data-sort="abs" class="active">|value| ↓</button>
+        <button data-sort="desc">value ↓</button>
+        <button data-sort="asc">value ↑</button>
+        <button data-sort="alpha">a–z</button>
+      </div>
+      <div id="allContribs"></div>
+    </details>
     <div class="detectors" id="detectors"></div>
+    <div class="feedback" id="feedback" hidden>
+      <label>Reviewer feedback</label>
+      <div class="row">
+        <button class="fb human" id="fbHuman" title="Confirm this submission is human-written">Human</button>
+        <button class="fb llm" id="fbLLM" title="Confirm this submission is LLM-generated">LLM</button>
+        <input id="fbNotes" placeholder="Optional notes…" />
+      </div>
+      <div class="status" id="fbStatus"></div>
+    </div>
   </section>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
+
+// beetApi: dual-mode client. Uses Tauri invoke() when running inside the
+// Tauri shell (detected via window.__TAURI_INTERNALS__), otherwise falls back
+// to fetch() against the local HTTP server. Same call shape for both.
+const beetApi = (() => {
+  const isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+  if (isTauri) {
+    const invoke = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke)
+      || (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+    if (typeof invoke !== "function") {
+      throw new Error("Tauri detected but invoke() is unavailable");
+    }
+    return {
+      mode: "tauri",
+      analyze: (text, submission_id) => invoke("analyze", { text, submissionId: submission_id || null }),
+      analyzeBatch: (items) => invoke("analyze_batch", { items }),
+      feedback: (payload) => invoke("feedback", {
+        text: payload.text,
+        confirmedLabel: payload.confirmed_label,
+        submissionId: payload.submission_id || null,
+        reviewerNotes: payload.reviewer_notes || null,
+      }),
+      health: () => invoke("health"),
+    };
+  }
+  const post = async (path, body) => {
+    const res = await fetch(path, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "request failed");
+    return data;
+  };
+  return {
+    mode: "http",
+    analyze: (text, submission_id) => post("/analyze", { text, submission_id }),
+    analyzeBatch: (items) => post("/batch", { items }),
+    feedback: (payload) => post("/feedback", payload),
+    health: () => fetch("/health").then(r => r.json()),
+  };
+})();
+
+let lastAnalysis = null;  // {text, submission_id} — captured at analyze() so feedback can echo it back
+
 $("go").addEventListener("click", async () => {
   const text = $("text").value.trim();
   const err = $("err");
@@ -103,16 +237,43 @@ $("go").addEventListener("click", async () => {
   if (!text) { err.textContent = "Enter some text."; err.hidden = false; return; }
   btn.disabled = true; btn.textContent = "Analyzing…";
   try {
-    const res = await fetch("/analyze", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text})
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "request failed");
+    const data = await beetApi.analyze(text);
+    lastAnalysis = { text, submission_id: data.submission_id || "" };
     render(data);
-  } catch (e) { err.textContent = e.message; err.hidden = false; }
+    $("feedback").hidden = false;
+    $("fbStatus").textContent = "";
+    $("fbStatus").className = "status";
+    $("fbNotes").value = "";
+  } catch (e) { err.textContent = e.message || String(e); err.hidden = false; }
   finally { btn.disabled = false; btn.textContent = "Analyze"; }
 });
+
+async function submitFeedback(label) {
+  if (!lastAnalysis) return;
+  const status = $("fbStatus");
+  status.className = "status";
+  status.textContent = "Submitting…";
+  const [h, l] = [$("fbHuman"), $("fbLLM")];
+  h.disabled = true; l.disabled = true;
+  try {
+    await beetApi.feedback({
+      text: lastAnalysis.text,
+      confirmed_label: label,
+      submission_id: lastAnalysis.submission_id,
+      reviewer_notes: $("fbNotes").value.trim() || null,
+    });
+    status.className = "status ok";
+    status.textContent = `Recorded as ${label === 1 ? "LLM" : "human"}.`;
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = e.message || String(e);
+  } finally {
+    h.disabled = false; l.disabled = false;
+  }
+}
+$("fbHuman").addEventListener("click", () => submitFeedback(0));
+$("fbLLM").addEventListener("click", () => submitFeedback(1));
+
 function render(r) {
   $("result").hidden = false;
   const badge = $("badge");
@@ -136,7 +297,96 @@ function render(r) {
   }).join("");
   $("contribs").innerHTML = contribs || "<div class='k'>no contributions reported</div>";
   $("detectors").textContent = "Detectors run: " + (r.detectors_run || []).join(", ");
+  renderLayers(r.layer_results || []);
+  renderAllContribs(r.feature_contributions || {});
 }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  })[c]);
+}
+
+function formatSignal(v) {
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(4);
+  if (typeof v === "string") return v;
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+function renderLayers(layers) {
+  const body = $("layersBody");
+  if (!layers.length) {
+    body.innerHTML = "<tr><td colspan='6' class='k'>no layer results</td></tr>";
+    return;
+  }
+  body.innerHTML = layers.map((l, i) => {
+    const verdict = l.determination || "UNCERTAIN";
+    const sig = l.signals || {};
+    const sigRows = Object.keys(sig).length
+      ? Object.entries(sig).map(([k, v]) =>
+          `${escapeHtml(k)}: ${escapeHtml(formatSignal(v))}`).join("\n")
+      : "(no signals)";
+    return `
+      <tr class="row" data-idx="${i}">
+        <td>${escapeHtml(l.layer_id || "")}</td>
+        <td>${escapeHtml(l.domain || "")}</td>
+        <td style="text-align:right">${Number(l.raw_score || 0).toFixed(2)}</td>
+        <td style="text-align:right">${Number(l.p_llm || 0).toFixed(3)}</td>
+        <td style="text-align:right">${Number(l.confidence || 0).toFixed(2)}</td>
+        <td><span class="badge ${verdict}">${verdict}</span></td>
+      </tr>
+      <tr class="sig" data-idx="${i}" hidden><td colspan="6">${escapeHtml(sigRows)}</td></tr>
+    `;
+  }).join("");
+  body.querySelectorAll("tr.row").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const idx = tr.dataset.idx;
+      const sig = body.querySelector(`tr.sig[data-idx="${idx}"]`);
+      if (sig) sig.hidden = !sig.hidden;
+    });
+  });
+}
+
+let _contribs = {};
+let _sortMode = "abs";
+function renderAllContribs(contribs) {
+  _contribs = contribs || {};
+  paintContribs();
+}
+function paintContribs() {
+  const entries = Object.entries(_contribs);
+  const container = $("allContribs");
+  if (!entries.length) {
+    container.innerHTML = "<div class='k'>no contributions reported</div>";
+    return;
+  }
+  const sorters = {
+    abs: (a, b) => Math.abs(b[1]) - Math.abs(a[1]),
+    desc: (a, b) => b[1] - a[1],
+    asc: (a, b) => a[1] - b[1],
+    alpha: (a, b) => a[0].localeCompare(b[0]),
+  };
+  entries.sort(sorters[_sortMode] || sorters.abs);
+  const maxAbs = Math.max(...entries.map(([, v]) => Math.abs(v)), 1e-9);
+  container.innerHTML = entries.map(([name, val]) => {
+    const pct = (Math.abs(val) / maxAbs) * 50;
+    const cls = val >= 0 ? "pos" : "neg";
+    const sign = val >= 0 ? "+" : "";
+    return `<div class="contrib-row">
+      <div class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+      <div class="bar"><div class="axis"></div><div class="fill ${cls}" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="val">${sign}${Number(val).toFixed(3)}</div>
+    </div>`;
+  }).join("");
+}
+document.getElementById("sortControls").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-sort]");
+  if (!btn) return;
+  _sortMode = btn.dataset.sort;
+  document.querySelectorAll("#sortControls button").forEach(b => b.classList.toggle("active", b === btn));
+  paintContribs();
+});
 </script>
 </body>
 </html>
