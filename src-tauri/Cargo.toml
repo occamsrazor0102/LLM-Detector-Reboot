@@ -1,0 +1,29 @@
+[package]
+name = "beet"
+version = "2.0.0"
+edition = "2021"
+description = "BEET 2.0 — LLM authorship detection desktop shell"
+authors = ["BEET contributors"]
+license = "MIT"
+repository = "https://github.com/occamsrazor0102/LLM-Detector-Reboot"
+default-run = "beet"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"

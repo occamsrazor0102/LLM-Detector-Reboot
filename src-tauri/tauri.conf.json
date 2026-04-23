@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BEET",
+  "version": "2.0.0",
+  "identifier": "com.beet.app",
+  "build": {
+    "frontendDist": "../beet/gui/static",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BEET 2.0 — LLM Authorship Detection",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": ["binaries/beet-sidecar"],
+    "copyright": "",
+    "category": "DeveloperTool",
+    "shortDescription": "LLM authorship detection",
+    "longDescription": "BEET 2.0 — detect LLM authorship via multi-detector pipeline fusion."
+  }
+}

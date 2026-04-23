@@ -1,0 +1,10 @@
+/target/
+Cargo.lock
+binaries/
+gen/
+icons/*.png
+icons/*.ico
+icons/*.icns
+icons/android/
+icons/ios/
+!icons/_source.png
