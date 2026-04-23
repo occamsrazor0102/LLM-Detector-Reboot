@@ -18,6 +18,7 @@ class LayerResult:
     attacker_tiers: list[str]
     compute_cost: COMPUTE_COSTS
     min_text_length: int
+    spans: list[dict] = field(default_factory=list)
 
 @dataclass
 class FusionResult:

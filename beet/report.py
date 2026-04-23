@@ -21,6 +21,7 @@ def build_json_report(determination: Determination, submission_id: str = "") -> 
                 "determination": lr.determination,
                 "signals": lr.signals,
                 "compute_cost": lr.compute_cost,
+                "spans": list(getattr(lr, "spans", None) or []),
             }
             for lr in determination.layer_results
         ],

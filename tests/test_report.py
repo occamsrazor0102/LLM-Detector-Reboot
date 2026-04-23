@@ -30,7 +30,8 @@ def test_json_report_serializes_layer_results():
     lr = LayerResult(layer_id="preamble", domain="universal", raw_score=0.8,
         p_llm=0.9, confidence=0.7, signals={"severity": "HIGH"},
         determination="RED", attacker_tiers=["A0"], compute_cost="trivial",
-        min_text_length=0)
+        min_text_length=0,
+        spans=[{"start": 0, "end": 10, "kind": "preamble", "note": "match"}])
     det = Determination(label="RED", p_llm=0.9, confidence_interval=(0.8, 0.95),
         prediction_set=["RED"], reason="t", top_features=[("preamble", 1.0)],
         override_applied=True, detectors_run=["preamble"], cascade_phases=[1],
@@ -44,5 +45,6 @@ def test_json_report_serializes_layer_results():
         assert key in layer
     assert layer["layer_id"] == "preamble"
     assert layer["signals"] == {"severity": "HIGH"}
+    assert layer["spans"] == [{"start": 0, "end": 10, "kind": "preamble", "note": "match"}]
     assert report["feature_contributions"]["preamble"] == 1.0
     assert report["feature_contributions"]["fingerprint_vocab"] == 0.2

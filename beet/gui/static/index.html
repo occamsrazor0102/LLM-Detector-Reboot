@@ -238,6 +238,20 @@
     }
     .mini-bar > div { min-width: 0; }
 
+    .highlighted-text {
+      background: var(--panel2); border: 1px solid var(--line); border-radius: 4px;
+      padding: 12px; white-space: pre-wrap; word-break: break-word;
+      font: 13px/1.5 ui-monospace, Menlo, "Consolas", monospace; color: var(--ink);
+      max-height: 360px; overflow: auto;
+    }
+    .highlighted-text mark {
+      border-bottom: 1px dotted currentColor; background: transparent;
+      color: inherit; padding: 0;
+    }
+    .highlighted-text mark.span-preamble { background: rgba(209,73,91,0.22); color: var(--ink); }
+    .highlighted-text mark.span-fingerprint { background: rgba(228,163,58,0.22); color: var(--ink); }
+    .highlighted-text mark:hover { outline: 1px solid currentColor; }
+
     @media (max-width: 900px) {
       .view-analyze { grid-template-columns: 1fr; }
       main { padding: 12px; }
@@ -307,6 +321,11 @@
             <button data-sort="alpha">a–z</button>
           </div>
           <div id="allContribs"></div>
+        </details>
+        <details class="section" id="highlightsSection">
+          <summary>Highlighted text</summary>
+          <div class="highlighted-text" id="highlightedText"></div>
+          <div style="color:var(--muted);font-size:11px;margin-top:6px;">Preamble matches red, fingerprint words amber. Hover for detector note.</div>
         </details>
         <div class="detectors" id="detectors"></div>
         <div class="feedback" id="feedback" hidden>
@@ -712,6 +731,41 @@ function render(r) {
   $("detectors").textContent = "Detectors run: " + (r.detectors_run || []).join(", ");
   renderLayers(r.layer_results || []);
   renderAllContribs(r.feature_contributions || {});
+  renderHighlights(r.layer_results || []);
+}
+
+function renderHighlights(layers) {
+  const text = $("text").value || "";
+  const el = $("highlightedText");
+  if (!text) { el.textContent = ""; return; }
+  const spans = [];
+  for (const l of layers) {
+    for (const s of (l.spans || [])) {
+      if (typeof s.start !== "number" || typeof s.end !== "number") continue;
+      if (s.start < 0 || s.end > text.length || s.start >= s.end) continue;
+      spans.push({ ...s, layer: l.layer_id });
+    }
+  }
+  if (!spans.length) { el.innerHTML = `<span style="color:var(--muted);">${escapeHtml(text)}</span>`; return; }
+  spans.sort((a, b) => a.start - b.start);
+  // Drop overlapping (keep first)
+  const kept = [];
+  let last = -1;
+  for (const s of spans) {
+    if (s.start < last) continue;
+    kept.push(s); last = s.end;
+  }
+  let html = "";
+  let cursor = 0;
+  for (const s of kept) {
+    if (s.start > cursor) html += escapeHtml(text.slice(cursor, s.start));
+    const slice = escapeHtml(text.slice(s.start, s.end));
+    const note = s.note ? `${s.layer}: ${s.note}` : s.layer;
+    html += `<mark class="span-${escapeHtml(s.kind || 'misc')}" title="${escapeHtml(note)}">${slice}</mark>`;
+    cursor = s.end;
+  }
+  if (cursor < text.length) html += escapeHtml(text.slice(cursor));
+  el.innerHTML = html;
 }
 
 function escapeHtml(s) {

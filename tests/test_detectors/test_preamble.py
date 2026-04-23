@@ -34,6 +34,23 @@ def test_result_has_required_fields(detector, config):
     assert result.compute_cost == "trivial"
     assert "A0" in result.attacker_tiers
 
+
+def test_preamble_emits_spans_for_matches(detector, config):
+    result = detector.analyze(A0_PREAMBLE, config)
+    assert result.spans, "CRITICAL preamble text should produce at least one span"
+    for s in result.spans:
+        assert {"start", "end", "kind", "note"} <= set(s.keys())
+        assert s["kind"] == "preamble"
+        assert 0 <= s["start"] < s["end"] <= len(A0_PREAMBLE)
+        assert A0_PREAMBLE[s["start"]:s["end"]]  # the slice is non-empty
+
+
+def test_preamble_empty_spans_when_no_match(detector, config):
+    result = detector.analyze(CASUAL_SHORT, config)
+    # casual human text shouldn't hit preamble patterns
+    assert result.signals["severity"] == "NONE"
+    assert result.spans == []
+
 def test_conversational_opener_is_high_severity(detector, config):
     text = "Sure! Here's a comprehensive guide to pharmacokinetics that you can use:\n\nThe study..."
     result = detector.analyze(text, config)

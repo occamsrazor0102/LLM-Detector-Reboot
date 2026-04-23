@@ -33,3 +33,14 @@ def test_result_fields(detector, config):
     assert "A1" in result.attacker_tiers
     assert "hits_per_1000" in result.signals
     assert "matched_words" in result.signals
+
+
+def test_fingerprint_emits_spans_pointing_at_matches(detector, config):
+    text = "It's important to note that this approach plays a crucial role in the process."
+    result = detector.analyze(text, config)
+    assert result.spans, "text with fingerprint phrases should produce spans"
+    for s in result.spans:
+        assert {"start", "end", "kind", "note"} <= set(s.keys())
+        assert s["kind"] == "fingerprint"
+        assert 0 <= s["start"] < s["end"] <= len(text)
+        assert text[s["start"]:s["end"]]  # non-empty slice

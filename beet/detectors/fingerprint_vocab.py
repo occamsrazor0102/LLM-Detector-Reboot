@@ -33,15 +33,27 @@ class FingerprintVocabDetector:
         words = text.split()
         word_count = max(len(words), 1)
         matched_words = []
+        spans: list[dict] = []
         for word, pattern in self._word_patterns:
-            hits = len(pattern.findall(text))
-            if hits > 0: matched_words.extend([word] * hits)
+            for m in pattern.finditer(text):
+                matched_words.append(word)
+                spans.append({
+                    "start": m.start(), "end": m.end(),
+                    "kind": "fingerprint",
+                    "note": f"fingerprint word '{word}'",
+                })
         bigram_hits = 0
         matched_bigrams = []
         for bigram, pattern in self._bigram_patterns:
-            if pattern.search(text):
+            m = pattern.search(text)
+            if m:
                 bigram_hits += 1
                 matched_bigrams.append(bigram)
+                spans.append({
+                    "start": m.start(), "end": m.end(),
+                    "kind": "fingerprint",
+                    "note": f"fingerprint bigram '{bigram}'",
+                })
         hits_per_1000 = (len(matched_words) + bigram_hits * 1.5) / word_count * 1000
         p_llm = _interpolate(hits_per_1000, _CALIBRATION)
         if p_llm >= 0.75: determination = "RED"
@@ -55,6 +67,7 @@ class FingerprintVocabDetector:
                      "word_hit_count": len(matched_words), "bigram_hits": bigram_hits, "matched_bigrams": matched_bigrams},
             determination=determination, attacker_tiers=["A0", "A1"],
             compute_cost=self.compute_cost, min_text_length=30,
+            spans=spans,
         )
 
     def calibrate(self, labeled_data: list) -> None: pass

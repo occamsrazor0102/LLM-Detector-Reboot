@@ -27,12 +27,20 @@ class PreambleDetector:
         window = text[:500]
         matched_severity = "NONE"
         matched_names = []
+        spans: list[dict] = []
         for name, pattern, severity in self._patterns:
-            if pattern.search(window):
+            m = pattern.search(window)
+            if m:
                 matched_names.append(name)
                 order = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
                 if order.index(severity) > order.index(matched_severity):
                     matched_severity = severity
+                spans.append({
+                    "start": m.start(),
+                    "end": m.end(),
+                    "kind": "preamble",
+                    "note": f"preamble pattern '{name}' ({severity})",
+                })
         p_llm = _SEVERITY_P_LLM[matched_severity]
         if matched_severity == "CRITICAL": determination = "RED"
         elif matched_severity == "HIGH": determination = "AMBER"
@@ -44,6 +52,7 @@ class PreambleDetector:
             signals={"severity": matched_severity, "matched_patterns": matched_names, "n_matches": len(matched_names)},
             determination=determination, attacker_tiers=["A0", "A1"],
             compute_cost=self.compute_cost, min_text_length=10,
+            spans=spans,
         )
 
     def calibrate(self, labeled_data: list) -> None: pass
