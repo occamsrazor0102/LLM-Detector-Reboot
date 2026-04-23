@@ -527,9 +527,9 @@
       <table class="data" id="thresholdsTable"><tbody id="thresholdsBody"></tbody></table>
     </div>
     <div class="panel" style="margin-top:12px;">
-      <label>Detectors</label>
+      <label>Detectors <span id="detectorCounts"></span></label>
       <table class="data">
-        <thead><tr><th>id</th><th>enabled</th><th style="text-align:right">weight</th></tr></thead>
+        <thead><tr><th>id</th><th>enabled</th><th>available</th><th style="text-align:right">weight</th><th>notes</th></tr></thead>
         <tbody id="detectorsBody"></tbody>
       </table>
     </div>
@@ -1659,13 +1659,36 @@ function renderConfigView(cfg) {
   ].map(([k, v]) => `<tr><td style="color:var(--muted);font-family:inherit">${k}</td><td>${escapeHtml(String(v))}</td></tr>`).join("");
 
   const dets = cfg.detectors || [];
-  $("detectorsBody").innerHTML = dets.map(d => `
-    <tr style="${d.enabled ? "" : "opacity:0.4;"}">
+  const thead = document.querySelector("#view-settings table.data thead");
+  if (thead) {
+    thead.innerHTML = "<tr><th>id</th><th>enabled</th><th>available</th><th style='text-align:right'>weight</th><th>notes</th></tr>";
+  }
+  $("detectorsBody").innerHTML = dets.map(d => {
+    const dim = !d.enabled || !d.available;
+    const availChip = d.available
+      ? "<span class='badge GREEN'>yes</span>"
+      : "<span class='badge UNCERTAIN'>stub</span>";
+    const enabledChip = d.enabled
+      ? "<span class='badge GREEN'>on</span>"
+      : "<span class='badge UNCERTAIN'>off</span>";
+    const reason = d.reason || "";
+    const requires = (d.requires || []).length
+      ? `<span style="color:var(--muted);font-size:11px;">needs: ${(d.requires || []).map(escapeHtml).join(", ")}</span>`
+      : "";
+    return `<tr style="${dim ? "opacity:0.55;" : ""}">
       <td>${escapeHtml(d.id)}</td>
-      <td>${d.enabled ? "<span class='badge GREEN'>on</span>" : "<span class='badge UNCERTAIN'>off</span>"}</td>
+      <td>${enabledChip}</td>
+      <td>${availChip}</td>
       <td style="text-align:right">${Number(d.weight || 0).toFixed(2)}</td>
-    </tr>
-  `).join("");
+      <td style="font-size:11px;color:var(--muted);">${escapeHtml(reason)} ${requires}</td>
+    </tr>`;
+  }).join("");
+  const totalEnabled = dets.filter(d => d.enabled).length;
+  const totalAvailable = dets.filter(d => d.enabled && d.available).length;
+  const countsEl = document.getElementById("detectorCounts");
+  if (countsEl) {
+    countsEl.innerHTML = `<span style="color:var(--muted);font-size:12px;">${totalAvailable} active / ${totalEnabled} enabled / ${dets.length} declared</span>`;
+  }
 
   const h = cfg.history || {};
   $("historyCfgBody").innerHTML = [

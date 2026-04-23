@@ -1,0 +1,42 @@
+{
+  "n_samples": 100,
+  "n_failed": 0,
+  "config_hash": "253328f1a44f",
+  "metrics": {
+    "auroc": 0.734,
+    "ece": 0.4146,
+    "brier": 0.3924,
+    "tpr_at_fpr_01": 0.0
+  },
+  "per_tier": {
+    "human": {
+      "auroc": null,
+      "ece": 0.0641,
+      "brier": 0.0079,
+      "tpr_at_fpr_01": null
+    },
+    "A0": {
+      "auroc": null,
+      "ece": 0.8766,
+      "brier": 0.7769,
+      "tpr_at_fpr_01": null
+    }
+  },
+  "per_attack": {},
+  "confusion": {
+    "threshold": 0.5,
+    "tp": 0,
+    "fp": 0,
+    "tn": 50,
+    "fn": 50,
+    "precision": null,
+    "recall": 0.0,
+    "f1": null,
+    "accuracy": 0.5
+  },
+  "failed_samples": [],
+  "predictions": [],
+  "dataset": "data\\hc3_finance_smoke.jsonl",
+  "config": "configs\\screening.yaml",
+  "duration_seconds": 0.13
+}

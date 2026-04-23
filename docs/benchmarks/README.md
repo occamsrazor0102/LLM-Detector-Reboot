@@ -7,11 +7,32 @@ synthetic fixtures bundled with the repo.
 
 ## Status
 
-**No external benchmark has been run yet against the current pipeline.**
-The system is in heuristic mode (no trained EBM fusion, no calibrated
-conformal wrapper). Any numbers recorded in this directory prior to
-training the fusion should be treated as a lower bound on what the
-system can do once calibrated.
+First public benchmark landed: `hc3_finance_screening_smoke.json` — 100
+HC3 finance samples (50 human / 50 ChatGPT), screening profile (Tier-1
+detectors only, no trained fusion or conformal). Headline numbers:
+
+| metric         | value   | read-out |
+|----------------|---------|----------|
+| AUROC          | 0.734   | the Tier-1 ensemble has real ranking signal |
+| ECE            | 0.415   | severe miscalibration — expected in heuristic mode |
+| Brier          | 0.392   | high — the hand-picked p(LLM) mappings drift far from labels |
+| TPR @ FPR 1%   | 0.000   | can't discriminate at a strict FP budget |
+| accuracy @ p≥0.5 | 0.500 | predicts every sample as human at the default threshold |
+
+The AUROC says the detectors rank correctly; the ECE/Brier and
+threshold behaviour say the probabilities they emit are not usable
+as calibrated probabilities. This is exactly the diagnosis the review
+called out: "the visual grammar of calibrated probabilities…without
+the underlying calibration."
+
+Training the EBM fusion on a labeled dataset should move accuracy at
+a useful threshold well above 0.5 without changing AUROC much (fusion
+changes calibration more than ranking); an honest conformal wrapper
+then gives TPR@FPR a defensible operating point.
+
+The CI pipeline runs this same 100-sample smoke benchmark on every push
+to master and uploads the result as an artifact, so this number can
+drift up as improvements land.
 
 ## HC3 — Human ChatGPT Comparison Corpus
 

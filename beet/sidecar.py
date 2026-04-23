@@ -54,14 +54,20 @@ def _curated_config_view(profile: str | None, config: dict) -> dict:
     Kept separate from the raw dict so the RPC shape stays stable even if
     the internal config layout changes.
     """
+    from beet.pipeline import detector_availability
+
     decision = (config or {}).get("decision") or {}
     abst = decision.get("abstention") or {}
     detectors_raw = (config or {}).get("detectors") or {}
+    avail = {row["id"]: row for row in detector_availability(config or {})}
     detectors = [
         {
             "id": did,
             "enabled": bool((d or {}).get("enabled", True)),
             "weight": float((d or {}).get("weight", 1.0)),
+            "available": bool(avail.get(did, {}).get("available", False)),
+            "reason": avail.get(did, {}).get("reason", ""),
+            "requires": avail.get(did, {}).get("requires", []),
         }
         for did, d in detectors_raw.items()
     ]

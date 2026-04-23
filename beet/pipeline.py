@@ -1,4 +1,6 @@
+import importlib
 import logging
+import os
 from pathlib import Path
 from beet.config import load_config
 from beet.contracts import Determination, LayerResult, RouterDecision
@@ -11,6 +13,99 @@ from beet.decision import DecisionEngine
 import beet.detectors as detector_registry
 
 logger = logging.getLogger("beet")
+
+
+# Detectors that can't do meaningful work in the single-submission analyze
+# path — they need batch context (multiple submissions) or external
+# dependencies (API keys, torch). Used by detector_availability() so the
+# Settings tab can report which detectors are really active vs which are
+# enabled-but-stub.
+_BATCH_ONLY_DETECTORS = {"cross_similarity", "contributor_graph"}
+
+
+def _has_module(name: str) -> bool:
+    try:
+        importlib.util.find_spec(name)
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def detector_availability(config: dict) -> list[dict]:
+    """Introspect which detectors will actually produce useful output.
+
+    Returns one row per detector declared in config, with:
+      - id
+      - enabled: from config
+      - available: will contribute non-SKIP results in the single-submission
+        analyze path
+      - reason: short explanation when unavailable
+      - requires: tags describing what the detector depends on
+    """
+    detectors_cfg = (config or {}).get("detectors") or {}
+    all_dets = detector_registry.get_all_detectors()
+    missing = detector_registry.get_missing_detectors()
+
+    has_transformers = _has_module("transformers") and _has_module("torch")
+    has_anthropic = _has_module("anthropic")
+    has_openai = _has_module("openai")
+    anthropic_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    openai_key = bool(os.environ.get("OPENAI_API_KEY"))
+
+    out: list[dict] = []
+    for det_id, det_cfg in detectors_cfg.items():
+        enabled = bool((det_cfg or {}).get("enabled", True))
+        row = {
+            "id": det_id,
+            "enabled": enabled,
+            "available": False,
+            "reason": "",
+            "requires": [],
+        }
+        if det_id in missing:
+            row["reason"] = f"import failed: {missing[det_id]}"
+            out.append(row)
+            continue
+        if det_id not in all_dets:
+            row["reason"] = "not registered"
+            out.append(row)
+            continue
+        if not enabled:
+            row["reason"] = "disabled in config"
+            out.append(row)
+            continue
+        # Detector-specific readiness gates
+        if det_id in _BATCH_ONLY_DETECTORS:
+            row["requires"] = ["batch"]
+            row["reason"] = "batch-only (needs 2+ submissions)"
+            out.append(row)
+            continue
+        if det_id in {"contrastive_lm", "surprisal_dynamics", "perturbation", "token_cohesiveness"}:
+            row["requires"] = ["transformers", "torch"]
+            if not has_transformers:
+                row["reason"] = "requires beet[tier2] (transformers + torch)"
+                out.append(row)
+                continue
+        if det_id == "contrastive_gen":
+            provider = (det_cfg or {}).get("provider", "anthropic")
+            row["requires"] = [f"{provider} API key"]
+            if provider == "anthropic" and not (has_anthropic and anthropic_key):
+                row["reason"] = "requires beet[tier3] + ANTHROPIC_API_KEY"
+                out.append(row)
+                continue
+            if provider == "openai" and not (has_openai and openai_key):
+                row["reason"] = "requires beet[tier3] + OPENAI_API_KEY"
+                out.append(row)
+                continue
+        if det_id == "dna_gpt":
+            row["requires"] = ["anthropic API key"]
+            if not (has_anthropic and anthropic_key):
+                row["reason"] = "requires beet[tier3] + ANTHROPIC_API_KEY"
+                out.append(row)
+                continue
+        row["available"] = True
+        out.append(row)
+    return out
 
 
 class BeetPipeline:

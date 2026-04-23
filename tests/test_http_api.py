@@ -189,6 +189,11 @@ def test_config_current_curated_view(server):
     assert body["profile"] == "screening"
     assert "red" in body["thresholds"]
     assert isinstance(body["detectors"], list) and body["detectors"]
+    # Availability introspection: each detector reports available/reason/requires
+    for d in body["detectors"]:
+        assert "available" in d and isinstance(d["available"], bool)
+        assert "reason" in d
+        assert "requires" in d and isinstance(d["requires"], list)
 
 
 def test_config_switch_updates_active_profile(server):
