@@ -3,6 +3,26 @@
 This file tells Claude Code how to work in this repo. Follow it as though
 these were your standing orders here.
 
+## Standing orders (non-negotiable)
+
+- **Always run the tests before marking any task complete.** `pytest -q`
+  at minimum; a passing run is the gate for "done," not code that looks
+  right. If the tests don't cover the change, add the test first.
+- **Never create files outside the project directory.** No writes to
+  `~`, `/tmp`, sibling repos, or any path that isn't under the current
+  repo root. If a task seems to require it, stop and ask.
+- **Ask before deleting any file.** Even obvious-looking scratch files
+  (dumps, one-off outputs) can be user WIP — confirm before `rm` or
+  before removing a tracked file in git.
+- **Explain reasoning before writing code.** For anything more than a
+  one-line fix, write a sentence or two describing what you'll change
+  and why *before* the first edit. The user should be able to redirect
+  you before the diff lands.
+- **If unsure, ask — don't guess.** Ambiguous requirements, missing
+  context, uncertain API shapes: surface the question rather than
+  pick a path and hope. Guessing once is faster; guessing wrong
+  compounds across a session.
+
 ## What this project is
 
 A multi-detector fusion pipeline for classifying whether text was written
