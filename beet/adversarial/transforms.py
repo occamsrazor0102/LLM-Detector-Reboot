@@ -36,7 +36,17 @@ _TYPO_SWAPS = {"the": "teh", "and": "adn", "you": "yuo", "with": "wiht",
 
 
 def inject_typos(text: str, *, rate: float = 0.15, seed: int | None = None, **_: object) -> str:
-    """Introduce casual misspellings and occasional punctuation drops."""
+    """Introduce casual misspellings and occasional punctuation drops.
+
+    The two branches have deliberately asymmetric multipliers on `rate`:
+    - ``rate * 3`` for typo swaps, because typos only fire on the small
+      fraction of words present in _TYPO_SWAPS — boosting here keeps the
+      effective per-word typo rate close to the nominal ``rate``.
+    - ``rate / 3`` for punctuation drops, because that branch fires on
+      every word ending in `.` / `,` / `;` (a much larger population) —
+      dampening keeps the punctuation-loss rate comparable.
+    Both are empirical starting points; treat as knobs, not physics.
+    """
     rng = random.Random(seed)
     words = text.split(" ")
     out = []

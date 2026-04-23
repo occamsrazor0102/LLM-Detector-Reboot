@@ -24,12 +24,19 @@ def test_kl_symmetric_positive_for_different():
 
 
 def test_drift_monitor_fires_on_population_shift(tmp_path):
+    import time as _time
     mon = DriftMonitor(tmp_path, {"drift_monitoring": {"window_size": 10}})
     alerts = []
     for _ in range(10):
         alerts.extend(mon.record(0.95, "RED", {}))
     assert any("POPULATION_DRIFT" in a for a in alerts)
-    assert (tmp_path / "alerts.jsonl").exists()
+    # Alert file is written on a daemon thread; poll briefly.
+    path = tmp_path / "alerts.jsonl"
+    for _ in range(50):  # up to ~500ms
+        if path.exists() and path.stat().st_size > 0:
+            break
+        _time.sleep(0.01)
+    assert path.exists()
 
 
 def test_drift_monitor_no_alerts_on_balanced(tmp_path):

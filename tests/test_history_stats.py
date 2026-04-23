@@ -111,3 +111,20 @@ def test_detector_stats_aggregates_across_reports(store):
 def test_detector_stats_ignores_reports_without_layer_results(store):
     store.record(_report(det="AMBER", sid="a", layers=[]), source="analyze", text="x")
     assert store.detector_stats() == []
+
+
+def test_cascade_distribution_aggregates_phases(store):
+    # Three reports: one Phase 1 only, one 1+2, one 1+2+3
+    for i, phases in enumerate([[1], [1, 2], [1, 2, 3]]):
+        rpt = _report(sid=f"s{i}")
+        rpt["cascade_phases"] = phases
+        store.record(rpt, source="analyze", text="x")
+    d = store.cascade_distribution()
+    assert d["n_samples"] == 3
+    assert d["phase_counts"][1] == 3
+    assert d["phase_counts"][2] == 2
+    assert d["phase_counts"][3] == 1
+    assert d["phase_set_counts"]["1"] == 1
+    assert d["phase_set_counts"]["1-2"] == 1
+    assert d["phase_set_counts"]["1-2-3"] == 1
+    assert len(d["p_llm_histogram"]) == 10

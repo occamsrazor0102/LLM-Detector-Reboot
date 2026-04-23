@@ -233,6 +233,16 @@ def test_monitoring_detectors_endpoint(server):
     assert isinstance(body["detectors"], list)
 
 
+def test_monitoring_cascade_endpoint(server):
+    url, _ = server
+    _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    status, body = _post(url, "/monitoring/cascade", {})
+    assert status == 200
+    assert body["n_samples"] >= 1
+    assert "phase_counts" in body
+    assert "p_llm_histogram" in body
+
+
 def test_evaluation_run_happy_path(server):
     url, _ = server
     items = [

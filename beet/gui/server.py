@@ -91,7 +91,10 @@ def _make_handler(
             elif path == "/health":
                 pipe = ctx.pipeline
                 model_loaded = pipe._fusion._model is not None
-                conformal_loaded = pipe._fusion._conformal is not None
+                conformal_loaded = (
+                    pipe._fusion._conformal is not None
+                    and getattr(pipe._fusion._conformal, "calibrated", False)
+                )
                 if model_loaded and conformal_loaded:
                     cal_status = "calibrated"
                 elif model_loaded:
@@ -164,6 +167,8 @@ def _make_handler(
                 self._handle_monitoring_timeline(body)
             elif path == "/monitoring/detectors":
                 self._handle_monitoring_detectors(body)
+            elif path == "/monitoring/cascade":
+                self._handle_monitoring_cascade(body)
             elif path == "/evaluation/run":
                 self._handle_run_eval(body)
             elif path == "/monitoring/drift":
@@ -331,6 +336,17 @@ def _make_handler(
             try:
                 limit = int(body.get("limit", 500))
                 self._send_json(200, {"detectors": history.detector_stats(limit=limit)})
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+
+        def _handle_monitoring_cascade(self, body: dict) -> None:
+            if history is None:
+                self._send_json(503, {"error": "history disabled"})
+                return
+            try:
+                limit = int(body.get("limit", 1000))
+                self._send_json(200, history.cascade_distribution(limit=limit))
             except Exception as e:
                 traceback.print_exc()
                 self._send_json(500, {"error": str(e)})

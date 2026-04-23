@@ -155,6 +155,15 @@ def test_monitoring_detectors(sidecar):
     assert {"id", "n", "mean_p_llm", "mean_confidence", "determination_hist"} <= set(d.keys())
 
 
+def test_monitoring_cascade(sidecar):
+    sc, _ = sidecar
+    sc.handle("analyze", {"text": "Certainly! Here is a comprehensive overview."})
+    res = sc.handle("monitoring_cascade", {})
+    assert res["n_samples"] >= 1
+    assert set(res["phase_counts"].keys()) == {1, 2, 3, 4}
+    assert "p_llm_histogram" in res and len(res["p_llm_histogram"]) == 10
+
+
 def test_run_eval_happy_path(sidecar):
     sc, _ = sidecar
     items = [

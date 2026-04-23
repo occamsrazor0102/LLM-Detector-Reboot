@@ -44,6 +44,7 @@ fn main() {
             commands::monitoring_summary,
             commands::monitoring_timeline,
             commands::monitoring_detectors,
+            commands::monitoring_cascade,
             commands::run_eval,
             commands::monitoring_drift,
             commands::monitoring_set_baseline,

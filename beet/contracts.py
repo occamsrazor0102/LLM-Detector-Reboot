@@ -27,6 +27,16 @@ class FusionResult:
     prediction_set: list[str]
     feature_contributions: dict
     top_contributors: list[tuple[str, float]]
+    # Honest split-conformal prediction set over the binary label set.
+    # One of ["LLM"], ["human"], ["LLM", "human"], or None when the
+    # conformal wrapper isn't calibrated. Distinct from prediction_set,
+    # which is a cosmetic severity-band mapping.
+    conformal_set: list[str] | None = None
+    conformal_alpha: float | None = None
+    # "ebm" when the fitted model produced the result, "naive" when the
+    # weighted-mean fallback did. Surfaced so the UI can caveat
+    # "feature contributions" when they're really deviations-from-prior.
+    fusion_mode: str = "naive"
 
 @dataclass
 class Determination:
@@ -42,6 +52,9 @@ class Determination:
     mixed_report: dict | None
     layer_results: list[LayerResult] = field(default_factory=list)
     feature_contributions: dict = field(default_factory=dict)
+    conformal_set: list[str] | None = None
+    conformal_alpha: float | None = None
+    fusion_mode: str = "naive"
 
 @dataclass
 class RouterDecision:

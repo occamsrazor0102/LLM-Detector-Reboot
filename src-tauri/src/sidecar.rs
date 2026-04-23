@@ -110,15 +110,30 @@ impl SidecarManager {
 
 impl Drop for SidecarManager {
     fn drop(&mut self) {
-        // Best-effort graceful shutdown: send the shutdown RPC, then kill if
-        // the child lingers. We cannot await here, so we write directly and
-        // give the child a moment before killing.
+        // Best-effort graceful shutdown. We cannot .await here (Drop isn't
+        // async) so we can't properly wait on the oneshot, but we can at
+        // least write the shutdown RPC and give the child up to ~500ms to
+        // flush buffers and exit on its own before we kill it.
         if let Ok(mut stdin) = self.stdin.lock() {
             let _ = writeln!(stdin, "{}", json!({"id": 0, "method": "shutdown"}));
             let _ = stdin.flush();
         }
+        // Drop stdin to signal EOF in case the child is waiting on input.
+        // (stdin is owned by a Mutex; the outer Drop will release it.)
         if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
+            // Poll try_wait a few times so a graceful exit doesn't race
+            // against kill(). 10 × 50ms = 500ms total ceiling.
+            let mut exited = false;
+            for _ in 0..10 {
+                match child.try_wait() {
+                    Ok(Some(_)) => { exited = true; break; }
+                    Ok(None) => thread::sleep(std::time::Duration::from_millis(50)),
+                    Err(_) => break,
+                }
+            }
+            if !exited {
+                let _ = child.kill();
+            }
             let _ = child.wait();
         }
     }

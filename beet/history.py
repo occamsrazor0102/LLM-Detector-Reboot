@@ -356,6 +356,51 @@ class HistoryStore:
             for r in rows
         ]
 
+    def cascade_distribution(self, *, limit: int = 1000) -> dict:
+        """Phase-run frequency across recent submissions.
+
+        Useful for tuning cascade short-circuit thresholds — if Phase 2 runs
+        on almost every input, the uncertain band is too wide.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT report FROM submissions ORDER BY recorded_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        n = 0
+        phase_counts: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0}
+        phase_set_counts: dict[str, int] = {}
+        p_llm_values: list[float] = []
+        for r in rows:
+            try:
+                report = json.loads(r["report"])
+            except Exception:
+                continue
+            phases = report.get("cascade_phases") or []
+            if not phases:
+                continue
+            n += 1
+            for p in phases:
+                if p in phase_counts:
+                    phase_counts[p] += 1
+            key = "-".join(str(p) for p in sorted(set(phases)))
+            phase_set_counts[key] = phase_set_counts.get(key, 0) + 1
+            try:
+                p_llm_values.append(float(report.get("p_llm", 0.0)))
+            except (TypeError, ValueError):
+                pass
+        # p_llm histogram, 10 bins from 0.0 to 1.0
+        hist = [0] * 10
+        for p in p_llm_values:
+            b = min(9, max(0, int(p * 10)))
+            hist[b] += 1
+        return {
+            "n_samples": n,
+            "phase_counts": phase_counts,
+            "phase_set_counts": phase_set_counts,
+            "p_llm_histogram": hist,
+        }
+
     def detector_stats(self, *, limit: int = 500) -> list[dict]:
         """Aggregate per-detector across the last N reports.
 

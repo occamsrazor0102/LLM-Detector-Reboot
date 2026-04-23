@@ -78,9 +78,9 @@ def test_conformal_save_requires_calibration(tmp_path):
         w.save(tmp_path / "x.json")
 
 
-def test_ebm_fusion_applies_conformal_in_naive_path():
-    """When only conformal is provided (no trained EBM), prediction_set must
-    come from the conformal wrapper, not the naive heuristic."""
+def test_ebm_fusion_publishes_conformal_set_when_calibrated():
+    """A calibrated conformal wrapper populates FusionResult.conformal_set
+    (binary: human/LLM) while prediction_set stays cosmetic severity bands."""
     w = ConformalWrapper(alpha=0.1)
     scores = np.linspace(0.05, 0.95, 20)
     labels = (scores > 0.5).astype(int)
@@ -92,13 +92,39 @@ def test_ebm_fusion_applies_conformal_in_naive_path():
     r_with = fusion_with.fuse([_layer(0.82)], word_count=100, domain="prose")
     r_without = fusion_without.fuse([_layer(0.82)], word_count=100, domain="prose")
 
-    expected = w.predict_set(r_with.p_llm)
-    assert r_with.prediction_set == expected
-    # Sanity: the naive heuristic path yields a different (or at least
-    # independent) prediction_set computation — they may coincide by chance
-    # but the code path is distinct.
-    assert fusion_with._conformal is w
-    assert fusion_without._conformal is None
+    # conformal_set is the real binary prediction set
+    assert r_with.conformal_set is not None
+    assert set(r_with.conformal_set).issubset({"human", "LLM"})
+    assert r_with.conformal_alpha == pytest.approx(0.1)
+    # uncalibrated: no conformal_set
+    assert r_without.conformal_set is None
+    assert r_without.conformal_alpha is None
+    # prediction_set is always severity-band strings, regardless
+    assert all(lbl in {"RED", "AMBER", "YELLOW", "GREEN", "UNCERTAIN"}
+               for lbl in r_with.prediction_set)
+    # Naive fusion mode reported
+    assert r_with.fusion_mode == "naive"
+
+
+def test_conformal_predict_set_is_binary():
+    """predict_set returns a subset of ['human', 'LLM']."""
+    w = ConformalWrapper(alpha=0.1)
+    # Obvious classes: low scores labeled human, high scores labeled LLM
+    scores = np.concatenate([np.linspace(0.02, 0.3, 50), np.linspace(0.7, 0.98, 50)])
+    labels = np.concatenate([np.zeros(50, dtype=int), np.ones(50, dtype=int)])
+    w.calibrate(scores, labels)
+    for p in (0.05, 0.5, 0.95):
+        ps = w.predict_set(p)
+        assert set(ps).issubset({"human", "LLM"})
+    # Uncalibrated wrapper returns both (maximum-uncertainty honest default)
+    w_raw = ConformalWrapper()
+    assert set(w_raw.predict_set(0.5)) == {"human", "LLM"}
+
+
+def test_conformal_rejects_tiny_calibration_set():
+    w = ConformalWrapper()
+    with pytest.raises(ValueError):
+        w.calibrate(np.array([0.1, 0.9]), np.array([0, 1]))
 
 
 def test_pipeline_falls_back_to_naive_when_model_path_missing(tmp_path):

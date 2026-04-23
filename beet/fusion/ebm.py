@@ -100,6 +100,12 @@ class EBMFusion:
             return self._naive_fuse(layer_results)
         return self._ebm_fuse(layer_results, word_count, domain)
 
+    def _maybe_conformal(self, p_llm: float) -> tuple[list[str] | None, float | None]:
+        """Return the honest binary conformal set (+alpha) when calibrated."""
+        if self._conformal is None or not getattr(self._conformal, "calibrated", False):
+            return None, None
+        return self._conformal.predict_set(p_llm), float(getattr(self._conformal, "alpha", 0.0))
+
     def _ebm_fuse(self, results: list[LayerResult], word_count: int, domain: str) -> FusionResult:
         import numpy as np
         vec = self._assembler.assemble(results, word_count, domain)
@@ -120,13 +126,13 @@ class EBMFusion:
             top = []
 
         ci = (max(0.0, p_llm - 0.10), min(1.0, p_llm + 0.10))
-        if self._conformal is not None:
-            prediction_set = self._conformal.predict_set(p_llm)
-        else:
-            prediction_set = _p_llm_to_labels(p_llm, 0.10)
+        prediction_set = _p_llm_to_labels(p_llm, 0.10)
+        conformal_set, conformal_alpha = self._maybe_conformal(p_llm)
         return FusionResult(p_llm=p_llm, confidence_interval=ci,
                             prediction_set=prediction_set,
-                            feature_contributions=contribs, top_contributors=top)
+                            feature_contributions=contribs, top_contributors=top,
+                            conformal_set=conformal_set, conformal_alpha=conformal_alpha,
+                            fusion_mode="ebm")
 
     def _naive_fuse(self, results: list[LayerResult]) -> FusionResult:
         """Fallback when no EBM is trained."""
@@ -134,7 +140,9 @@ class EBMFusion:
         if not active:
             return FusionResult(p_llm=0.5, confidence_interval=(0.25, 0.75),
                                 prediction_set=["YELLOW", "AMBER"],
-                                feature_contributions={}, top_contributors=[])
+                                feature_contributions={}, top_contributors=[],
+                                conformal_set=None, conformal_alpha=None,
+                                fusion_mode="naive")
         w_sum = sum(r.confidence for r in active)
         p_llm = sum(r.p_llm * r.confidence for r in active) / w_sum
         spread = max(r.p_llm for r in active) - min(r.p_llm for r in active)
@@ -142,13 +150,13 @@ class EBMFusion:
         ci = (max(0.0, p_llm - hw), min(1.0, p_llm + hw))
         contribs = {r.layer_id: (r.p_llm - 0.5) * r.confidence for r in active}
         top = sorted(contribs.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
-        if self._conformal is not None:
-            prediction_set = self._conformal.predict_set(p_llm)
-        else:
-            prediction_set = _p_llm_to_labels(p_llm, hw)
+        prediction_set = _p_llm_to_labels(p_llm, hw)
+        conformal_set, conformal_alpha = self._maybe_conformal(p_llm)
         return FusionResult(p_llm=p_llm, confidence_interval=ci,
                             prediction_set=prediction_set,
-                            feature_contributions=contribs, top_contributors=top)
+                            feature_contributions=contribs, top_contributors=top,
+                            conformal_set=conformal_set, conformal_alpha=conformal_alpha,
+                            fusion_mode="naive")
 
 
 def _p_llm_to_labels(p_llm: float, uncertainty: float) -> list[str]:

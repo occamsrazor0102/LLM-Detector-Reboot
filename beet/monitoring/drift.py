@@ -8,6 +8,7 @@ Alerts fire when the current window diverges materially from a stored baseline:
 from __future__ import annotations
 
 import math
+import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -169,16 +170,29 @@ class DriftMonitor:
         return out
 
     def _flush_alerts(self, alerts: list[str]) -> None:
+        """Write alerts to disk off the critical analyze path.
+
+        Runs a daemon thread so the analyze RPC returns immediately; if the
+        process dies before the thread finishes, we lose at most a few
+        alert lines — acceptable for monitoring, which is redundant with
+        the in-process summary returned from check_drift().
+        """
         if not alerts:
             return
         path = self._path / "alerts.jsonl"
-        import json
-        with open(path, "a", encoding="utf-8") as f:
-            for a in alerts:
-                f.write(json.dumps({
-                    "alert": a,
-                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-                }) + "\n")
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        alerts_copy = list(alerts)
+
+        def _write():
+            import json
+            try:
+                with open(path, "a", encoding="utf-8") as f:
+                    for a in alerts_copy:
+                        f.write(json.dumps({"alert": a, "timestamp": timestamp}) + "\n")
+            except Exception:
+                pass  # monitoring is best-effort; don't kill the thread noisily
+
+        threading.Thread(target=_write, daemon=True).start()
 
     def get_summary(self) -> dict:
         if not self._observations:

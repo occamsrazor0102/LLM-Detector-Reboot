@@ -42,15 +42,32 @@ class DetectorCalibrator:
     def save(self, path: Path) -> None:
         data: dict[str, dict[str, list[float]]] = {}
         for det_id, ir in self._models.items():
+            # sklearn's IsotonicRegression stores the fitted knots on the
+            # estimator. These are public attributes on recent sklearn
+            # versions; guard so a change in internal naming produces a
+            # clear error rather than a silent skip or crash later.
+            if not (hasattr(ir, "X_thresholds_") and hasattr(ir, "y_thresholds_")):
+                raise RuntimeError(
+                    f"IsotonicRegression for '{det_id}' lacks X_thresholds_/"
+                    "y_thresholds_ attributes; your sklearn version is too new "
+                    "or too old for the save format expected here"
+                )
             data[det_id] = {
                 "X": ir.X_thresholds_.tolist(),
                 "y": ir.y_thresholds_.tolist(),
+                "schema": "isotonic-thresholds-v1",
             }
         Path(path).write_text(json.dumps(data, indent=2))
 
     def load(self, path: Path) -> None:
         data = json.loads(Path(path).read_text())
         for det_id, params in data.items():
+            schema = params.get("schema")
+            if schema is not None and schema != "isotonic-thresholds-v1":
+                raise RuntimeError(
+                    f"calibration artifact for '{det_id}' has unknown schema "
+                    f"{schema!r}; regenerate with the current code"
+                )
             ir = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
             x = np.asarray(params["X"], dtype=float)
             y = np.asarray(params["y"], dtype=float)

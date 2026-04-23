@@ -270,6 +270,8 @@ class Sidecar:
             return self._monitoring_timeline(params)
         if method == "monitoring_detectors":
             return self._monitoring_detectors(params)
+        if method == "monitoring_cascade":
+            return self._monitoring_cascade(params)
         if method == "run_eval":
             return self._run_eval(params)
         if method == "monitoring_drift":
@@ -348,7 +350,10 @@ class Sidecar:
     def _health(self) -> dict:
         fusion = self._pipeline._fusion
         model_loaded = fusion._model is not None
-        conformal_loaded = fusion._conformal is not None
+        conformal_loaded = (
+            fusion._conformal is not None
+            and getattr(fusion._conformal, "calibrated", False)
+        )
         if model_loaded and conformal_loaded:
             cal_status = "calibrated"
         elif model_loaded:
@@ -450,6 +455,11 @@ class Sidecar:
         if self._history is None:
             raise SidecarError("ERR_DISABLED", "history is disabled in this config")
         return {"detectors": self._history.detector_stats(limit=int(params.get("limit", 500)))}
+
+    def _monitoring_cascade(self, params: dict) -> dict:
+        if self._history is None:
+            raise SidecarError("ERR_DISABLED", "history is disabled in this config")
+        return self._history.cascade_distribution(limit=int(params.get("limit", 1000)))
 
     def _run_eval(self, params: dict) -> dict:
         import time
