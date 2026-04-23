@@ -256,6 +256,7 @@
   <button data-tab="batch">Batch</button>
   <button data-tab="history">History</button>
   <button data-tab="monitoring">Monitoring</button>
+  <button data-tab="evaluation">Evaluation</button>
   <button data-tab="settings">Settings</button>
 </nav>
 <main>
@@ -392,6 +393,65 @@
     </div>
   </section>
 
+  <section class="view" id="view-evaluation">
+    <div class="panel">
+      <label>Dataset (JSONL — each line: {id, text, label, tier?, …})</label>
+      <div class="batch-tabs" role="tablist">
+        <button data-einput="paste" class="active">Paste JSONL</button>
+        <button data-einput="file">Upload .jsonl</button>
+        <button data-einput="history">Sample labeled history</button>
+      </div>
+      <div class="batch-input active" data-einput="paste">
+        <textarea id="evalPaste" placeholder='{"id":"s1","text":"…","label":1,"tier":"A0"}' style="min-height:180px;"></textarea>
+      </div>
+      <div class="batch-input" data-einput="file">
+        <div class="drop-zone" id="evalDrop">
+          Drop a .jsonl file here, or click to choose
+          <input type="file" id="evalFile" accept=".jsonl,.json,.txt" style="display:none">
+        </div>
+        <div id="evalFileStatus" style="margin-top:8px;color:var(--muted);font-size:12px;"></div>
+      </div>
+      <div class="batch-input" data-einput="history">
+        <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Pulls from history submissions that have reviewer feedback recorded.</div>
+        <button class="ghost" id="evalLoadHistory">Load labeled history</button>
+        <div id="evalHistoryStatus" style="margin-top:8px;color:var(--muted);font-size:12px;"></div>
+      </div>
+      <div class="actions" style="gap:12px;">
+        <button id="evalGo">Run evaluation</button>
+        <span class="reason" id="evalSummaryLine" style="margin:0;"></span>
+      </div>
+      <div id="evalErr" class="err" hidden></div>
+    </div>
+    <div id="evalResult" hidden>
+      <div class="summary-cards" id="evalCards" style="margin-top:12px;"></div>
+      <div class="panel" style="margin-top:12px;">
+        <label>Confusion matrix <span style="color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0;">(threshold p ≥ 0.5)</span></label>
+        <div id="evalConfusion"></div>
+      </div>
+      <div class="panel" style="margin-top:12px;">
+        <label>Per-tier breakdown</label>
+        <table class="data">
+          <thead><tr><th>tier</th><th style="text-align:right">n</th><th style="text-align:right">AUROC</th><th style="text-align:right">ECE</th><th style="text-align:right">Brier</th><th style="text-align:right">TPR@FPR1%</th></tr></thead>
+          <tbody id="evalPerTierBody"></tbody>
+        </table>
+      </div>
+      <div class="panel" style="margin-top:12px;" id="evalPerAttackPanel" hidden>
+        <label>Per-attack breakdown</label>
+        <table class="data">
+          <thead><tr><th>attack</th><th style="text-align:right">n</th><th style="text-align:right">AUROC</th><th style="text-align:right">ECE</th><th style="text-align:right">Brier</th><th style="text-align:right">TPR@FPR1%</th></tr></thead>
+          <tbody id="evalPerAttackBody"></tbody>
+        </table>
+      </div>
+      <details class="section" id="evalFailedSection" hidden>
+        <summary>Failed samples</summary>
+        <table class="data">
+          <thead><tr><th>id</th><th>error</th></tr></thead>
+          <tbody id="evalFailedBody"></tbody>
+        </table>
+      </details>
+    </div>
+  </section>
+
   <section class="view" id="view-settings">
     <div class="panel">
       <label>Active profile</label>
@@ -503,6 +563,7 @@ const beetApi = (() => {
       monitoringSummary: () => invoke("monitoring_summary", { params: {} }),
       monitoringTimeline: (limit) => invoke("monitoring_timeline", { params: { limit: limit || 200 } }),
       monitoringDetectors: (limit) => invoke("monitoring_detectors", { params: { limit: limit || 500 } }),
+      runEval: (items, max_samples) => invoke("run_eval", { params: { items, max_samples } }),
     };
   }
   const post = async (path, body) => {
@@ -537,12 +598,13 @@ const beetApi = (() => {
     monitoringSummary: () => post("/monitoring/summary", {}),
     monitoringTimeline: (limit) => post("/monitoring/timeline", { limit: limit || 200 }),
     monitoringDetectors: (limit) => post("/monitoring/detectors", { limit: limit || 500 }),
+    runEval: (items, max_samples) => post("/evaluation/run", { items, max_samples }),
   };
 })();
 $("modeIndicator").textContent = beetApi.mode;
 
 /* ---------------- tab routing ---------------- */
-const VIEWS = ["analyze", "batch", "history", "monitoring", "settings"];
+const VIEWS = ["analyze", "batch", "history", "monitoring", "evaluation", "settings"];
 function showTab(name) {
   if (!VIEWS.includes(name)) name = "analyze";
   VIEWS.forEach(v => {
@@ -1097,6 +1159,197 @@ function renderMonDetectors(dets) {
       <td><div class="mini-bar">${segs}</div></td>
     </tr>`;
   }).join("");
+}
+
+/* ---------------- Evaluation tab ---------------- */
+let _evalItems = [];
+
+document.querySelectorAll("[data-einput]").forEach(el => {
+  if (el.tagName !== "BUTTON") return;
+  el.addEventListener("click", () => {
+    document.querySelectorAll(".batch-tabs [data-einput]").forEach(b => b.classList.toggle("active", b === el));
+    document.querySelectorAll(".batch-input[data-einput]").forEach(s => s.classList.toggle("active", s.dataset.einput === el.dataset.einput));
+    updateEvalSummary();
+  });
+});
+
+function parseJsonlText(text) {
+  const items = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let row;
+    try { row = JSON.parse(line); }
+    catch (e) { throw new Error(`invalid JSON: ${line.slice(0, 60)}…`); }
+    if (!("id" in row) || !("text" in row) || !("label" in row)) {
+      throw new Error(`missing id/text/label in: ${line.slice(0, 60)}…`);
+    }
+    items.push(row);
+  }
+  return items;
+}
+
+$("evalPaste").addEventListener("input", () => {
+  try { _evalItems = parseJsonlText($("evalPaste").value); $("evalErr").hidden = true; }
+  catch (e) { _evalItems = []; }
+  updateEvalSummary();
+});
+
+$("evalDrop").addEventListener("click", () => $("evalFile").click());
+$("evalDrop").addEventListener("dragover", e => { e.preventDefault(); e.currentTarget.classList.add("dragover"); });
+$("evalDrop").addEventListener("dragleave", e => e.currentTarget.classList.remove("dragover"));
+$("evalDrop").addEventListener("drop", e => {
+  e.preventDefault(); e.currentTarget.classList.remove("dragover");
+  const f = e.dataTransfer.files[0];
+  if (f) { $("evalFile").files = e.dataTransfer.files; $("evalFile").dispatchEvent(new Event("change")); }
+});
+$("evalFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  try {
+    _evalItems = parseJsonlText(text);
+    $("evalFileStatus").textContent = `Loaded ${_evalItems.length} items from ${f.name}`;
+    $("evalErr").hidden = true;
+  } catch (err) {
+    _evalItems = [];
+    $("evalFileStatus").textContent = "Parse error: " + err.message;
+  }
+  updateEvalSummary();
+});
+
+$("evalLoadHistory").addEventListener("click", async () => {
+  $("evalHistoryStatus").textContent = "Loading…";
+  try {
+    // Pull history and keep only those with has_feedback
+    const listed = await beetApi.historyList({ limit: 500, offset: 0 });
+    const fb = (listed.items || []).filter(x => x.has_feedback);
+    const gets = await Promise.all(fb.map(x => beetApi.historyGet(x.submission_id).catch(() => null)));
+    const items = [];
+    gets.forEach(g => {
+      if (!g || !g.feedback || !g.feedback.length || !g.text) return;
+      items.push({
+        id: g.submission_id,
+        text: g.text,
+        label: Number(g.feedback[0].confirmed_label),
+        tier: "history",
+      });
+    });
+    _evalItems = items;
+    $("evalHistoryStatus").textContent = `Loaded ${items.length} labeled submissions from history`;
+    updateEvalSummary();
+  } catch (e) {
+    $("evalHistoryStatus").textContent = "Error: " + (e.message || e);
+  }
+});
+
+function updateEvalSummary() {
+  if (!_evalItems.length) {
+    $("evalSummaryLine").textContent = "";
+    return;
+  }
+  const labels = _evalItems.map(i => Number(i.label));
+  const pos = labels.filter(l => l === 1).length;
+  const neg = labels.filter(l => l === 0).length;
+  const tiers = new Set(_evalItems.map(i => i.tier).filter(Boolean));
+  $("evalSummaryLine").textContent = `${_evalItems.length} samples — ${pos} LLM, ${neg} human${tiers.size ? `, tiers: ${[...tiers].join(", ")}` : ""}`;
+}
+
+$("evalGo").addEventListener("click", async () => {
+  const err = $("evalErr");
+  err.hidden = true;
+  if (!_evalItems.length) { err.textContent = "No items loaded."; err.hidden = false; return; }
+  const btn = $("evalGo");
+  btn.disabled = true; btn.textContent = `Running (${_evalItems.length})…`;
+  try {
+    const res = await beetApi.runEval(_evalItems, Math.max(_evalItems.length, 200));
+    renderEvalResult(res);
+  } catch (e) {
+    err.textContent = e.message || String(e); err.hidden = false;
+  } finally {
+    btn.disabled = false; btn.textContent = "Run evaluation";
+  }
+});
+
+function fmtMetric(v, dp = 3) {
+  if (v == null || Number.isNaN(v)) return "—";
+  return Number(v).toFixed(dp);
+}
+
+function renderEvalResult(res) {
+  $("evalResult").hidden = false;
+  const m = res.metrics || {};
+  const cards = [
+    { k: "Samples", v: String(res.n_samples) },
+    { k: "AUROC", v: fmtMetric(m.auroc) },
+    { k: "ECE", v: fmtMetric(m.ece) },
+    { k: "Brier", v: fmtMetric(m.brier) },
+    { k: "TPR @ FPR 1%", v: fmtMetric(m.tpr_at_fpr_01) },
+    { k: "Runtime", v: res.duration_ms != null ? `${(res.duration_ms/1000).toFixed(1)} s` : "—",
+      s: res.n_failed ? `${res.n_failed} failed` : "" },
+  ];
+  $("evalCards").innerHTML = cards.map(c =>
+    `<div class="card"><span class="k">${escapeHtml(c.k)}</span><span class="v">${escapeHtml(c.v)}</span>${c.s ? `<span class="s">${escapeHtml(c.s)}</span>` : ""}</div>`
+  ).join("");
+
+  const c = res.confusion || {};
+  $("evalConfusion").innerHTML = `
+    <table class="data" style="margin-top:8px;max-width:420px;">
+      <thead><tr><th></th><th>predicted LLM</th><th>predicted human</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--muted)">actual LLM</td>
+            <td><strong>${c.tp ?? 0}</strong> <span style="color:var(--muted)">tp</span></td>
+            <td>${c.fn ?? 0} <span style="color:var(--muted)">fn</span></td></tr>
+        <tr><td style="color:var(--muted)">actual human</td>
+            <td>${c.fp ?? 0} <span style="color:var(--muted)">fp</span></td>
+            <td><strong>${c.tn ?? 0}</strong> <span style="color:var(--muted)">tn</span></td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:8px;color:var(--muted);font-size:12px;">
+      precision ${fmtMetric(c.precision)} · recall ${fmtMetric(c.recall)} ·
+      F1 ${fmtMetric(c.f1)} · accuracy ${fmtMetric(c.accuracy)}
+    </div>
+  `;
+
+  const perTier = res.per_tier || {};
+  const tierCounts = {};
+  (res.predictions || []).forEach(p => {
+    if (p.tier) tierCounts[p.tier] = (tierCounts[p.tier] || 0) + 1;
+  });
+  const tierRows = Object.entries(perTier).map(([t, v]) =>
+    `<tr><td>${escapeHtml(t)}</td><td style="text-align:right">${tierCounts[t] || 0}</td>
+     <td style="text-align:right">${fmtMetric(v.auroc)}</td>
+     <td style="text-align:right">${fmtMetric(v.ece)}</td>
+     <td style="text-align:right">${fmtMetric(v.brier)}</td>
+     <td style="text-align:right">${fmtMetric(v.tpr_at_fpr_01)}</td></tr>`
+  ).join("");
+  $("evalPerTierBody").innerHTML = tierRows || `<tr><td colspan="6" class="empty">No tier labels in dataset.</td></tr>`;
+
+  const perAttack = res.per_attack || {};
+  if (Object.keys(perAttack).length) {
+    $("evalPerAttackPanel").hidden = false;
+    const attackCounts = {};
+    (res.predictions || []).forEach(p => { if (p.attack_name) attackCounts[p.attack_name] = (attackCounts[p.attack_name] || 0) + 1; });
+    $("evalPerAttackBody").innerHTML = Object.entries(perAttack).map(([a, v]) =>
+      `<tr><td>${escapeHtml(a)}</td><td style="text-align:right">${attackCounts[a] || 0}</td>
+       <td style="text-align:right">${fmtMetric(v.auroc)}</td>
+       <td style="text-align:right">${fmtMetric(v.ece)}</td>
+       <td style="text-align:right">${fmtMetric(v.brier)}</td>
+       <td style="text-align:right">${fmtMetric(v.tpr_at_fpr_01)}</td></tr>`
+    ).join("");
+  } else {
+    $("evalPerAttackPanel").hidden = true;
+  }
+
+  const failed = res.failed_samples || [];
+  if (failed.length) {
+    $("evalFailedSection").hidden = false;
+    $("evalFailedBody").innerHTML = failed.map(f =>
+      `<tr><td>${escapeHtml(f.id || "")}</td><td>${escapeHtml(f.error || "")}</td></tr>`
+    ).join("");
+  } else {
+    $("evalFailedSection").hidden = true;
+  }
 }
 
 /* ---------------- Settings tab ---------------- */

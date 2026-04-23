@@ -225,6 +225,28 @@ def test_monitoring_detectors_endpoint(server):
     assert isinstance(body["detectors"], list)
 
 
+def test_evaluation_run_happy_path(server):
+    url, _ = server
+    items = [
+        {"id": "a", "text": "Certainly! Here is a comprehensive overview.", "label": 1, "tier": "A0"},
+        {"id": "b", "text": "quick human scratch note about nothing", "label": 0, "tier": "A0"},
+    ]
+    status, body = _post(url, "/evaluation/run", {"items": items})
+    assert status == 200
+    assert body["n_samples"] == 2
+    assert "metrics" in body
+    assert "confusion" in body
+    assert "duration_ms" in body
+
+
+def test_evaluation_run_cap_enforced(server):
+    url, _ = server
+    items = [{"id": f"x{i}", "text": "t" * 5, "label": 0} for i in range(5)]
+    status, body = _post(url, "/evaluation/run", {"items": items, "max_samples": 3})
+    assert status == 400
+    assert body.get("code") == "ERR_TOO_LARGE"
+
+
 def test_feedback_records_in_history(server):
     url, hist = server
     _, analyzed = _post(url, "/analyze", {"text": "Certainly! Here is a comprehensive overview."})

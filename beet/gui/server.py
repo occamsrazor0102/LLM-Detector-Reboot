@@ -151,6 +151,8 @@ def _make_handler(
                 self._handle_monitoring_timeline(body)
             elif path == "/monitoring/detectors":
                 self._handle_monitoring_detectors(body)
+            elif path == "/evaluation/run":
+                self._handle_run_eval(body)
             else:
                 self.send_error(404)
 
@@ -315,6 +317,59 @@ def _make_handler(
             except Exception as e:
                 traceback.print_exc()
                 self._send_json(500, {"error": str(e)})
+
+        def _handle_run_eval(self, body: dict) -> None:
+            import time
+            from beet.evaluation.dataset import EvalSample
+            from beet.evaluation.runner import eval_report_to_dict, run_eval
+
+            items = body.get("items") or []
+            if not isinstance(items, list) or not items:
+                self._send_json(400, {"error": "items required"})
+                return
+            cap = max(1, min(int(body.get("max_samples", 200)), 1000))
+            if len(items) > cap:
+                self._send_json(400, {
+                    "error": f"dataset has {len(items)} samples, cap is {cap} (max 1000)",
+                    "code": "ERR_TOO_LARGE",
+                })
+                return
+            samples = []
+            for idx, it in enumerate(items):
+                if not isinstance(it, dict):
+                    self._send_json(400, {"error": f"item {idx} is not an object"})
+                    return
+                for required in ("id", "text", "label"):
+                    if required not in it:
+                        self._send_json(400, {"error": f"item {idx} missing '{required}'"})
+                        return
+                if not isinstance(it["text"], str) or not it["text"].strip():
+                    self._send_json(400, {"error": f"item {idx} has empty text"})
+                    return
+                try:
+                    samples.append(EvalSample(
+                        id=str(it["id"]),
+                        text=str(it["text"]),
+                        label=int(it["label"]),
+                        tier=it.get("tier"),
+                        source=it.get("source"),
+                        attack_name=it.get("attack_name"),
+                        attack_category=it.get("attack_category"),
+                        source_id=it.get("source_id"),
+                    ))
+                except (TypeError, ValueError) as e:
+                    self._send_json(400, {"error": f"item {idx}: {e}"})
+                    return
+            t0 = time.monotonic()
+            try:
+                report = run_eval(ctx.pipeline, samples)
+            except Exception as e:
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+                return
+            result = eval_report_to_dict(report)
+            result["duration_ms"] = int((time.monotonic() - t0) * 1000)
+            self._send_json(200, result)
 
         def _record_history(
             self,

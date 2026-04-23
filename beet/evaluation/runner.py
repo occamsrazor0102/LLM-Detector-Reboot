@@ -9,7 +9,9 @@ from typing import Protocol
 
 from beet.contracts import Determination
 from beet.evaluation.dataset import EvalSample
-from beet.evaluation.metrics import auroc, ece, brier, tpr_at_fpr, summarize
+from beet.evaluation.metrics import (
+    auroc, ece, brier, tpr_at_fpr, summarize, confusion_at_threshold,
+)
 
 
 class PipelineLike(Protocol):
@@ -114,3 +116,56 @@ def run_eval(
         failed_samples=failed,
         per_attack=per_attack,
     )
+
+
+def _clean_metrics(d: dict) -> dict:
+    """NaN -> None for JSON friendliness; other floats rounded."""
+    import math
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, float) and math.isnan(v):
+            out[k] = None
+        elif isinstance(v, float):
+            out[k] = round(v, 4)
+        else:
+            out[k] = v
+    return out
+
+
+def eval_report_to_dict(
+    report: EvalReport,
+    *,
+    include_predictions: bool = True,
+    threshold: float = 0.5,
+) -> dict:
+    """Serialize an EvalReport to a JSON-safe dict for the UI."""
+    y_true = [p["label"] for p in report.predictions]
+    y_score = [p["p_llm"] for p in report.predictions]
+    confusion = confusion_at_threshold(y_true, y_score, threshold=threshold)
+    tp, fp, tn, fn = confusion["tp"], confusion["fp"], confusion["tn"], confusion["fn"]
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision is not None and recall is not None and (precision + recall))
+        else None
+    )
+    accuracy = (tp + tn) / (tp + fp + tn + fn) if (tp + fp + tn + fn) else None
+    return {
+        "n_samples": report.n_samples,
+        "n_failed": len(report.failed_samples),
+        "config_hash": report.config_hash,
+        "metrics": _clean_metrics(report.metrics),
+        "per_tier": {k: _clean_metrics(v) for k, v in report.per_tier.items()},
+        "per_attack": {k: _clean_metrics(v) for k, v in report.per_attack.items()},
+        "confusion": {
+            "threshold": threshold,
+            "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+            "precision": round(precision, 4) if precision is not None else None,
+            "recall": round(recall, 4) if recall is not None else None,
+            "f1": round(f1, 4) if f1 is not None else None,
+            "accuracy": round(accuracy, 4) if accuracy is not None else None,
+        },
+        "failed_samples": list(report.failed_samples),
+        "predictions": list(report.predictions) if include_predictions else [],
+    }

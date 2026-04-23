@@ -151,6 +151,37 @@ def test_monitoring_detectors(sidecar):
     assert {"id", "n", "mean_p_llm", "mean_confidence", "determination_hist"} <= set(d.keys())
 
 
+def test_run_eval_happy_path(sidecar):
+    sc, _ = sidecar
+    items = [
+        {"id": "a", "text": "Certainly! Here is a comprehensive overview.", "label": 1, "tier": "A0"},
+        {"id": "b", "text": "quick human scratch note about nothing", "label": 0, "tier": "A0"},
+    ]
+    res = sc.handle("run_eval", {"items": items})
+    assert res["n_samples"] == 2
+    assert "metrics" in res and "confusion" in res
+    assert "duration_ms" in res
+    assert {p["id"] for p in res["predictions"]} == {"a", "b"}
+
+
+def test_run_eval_rejects_missing_field(sidecar):
+    sc, _ = sidecar
+    with pytest.raises(SidecarError) as ex:
+        sc.handle("run_eval", {"items": [{"id": "a", "text": "hi"}]})  # no label
+    assert ex.value.code == "ERR_BAD_PARAMS"
+
+
+def test_run_eval_cap_enforced(sidecar):
+    sc, _ = sidecar
+    items = [
+        {"id": f"x{i}", "text": "sample text here", "label": i % 2, "tier": "A0"}
+        for i in range(15)
+    ]
+    with pytest.raises(SidecarError) as ex:
+        sc.handle("run_eval", {"items": items, "max_samples": 10})
+    assert ex.value.code == "ERR_TOO_LARGE"
+
+
 def test_disabled_history_raises(tmp_path):
     config_path = Path(__file__).parent.parent / "configs" / "screening.yaml"
     cfg = load_config(config_path)

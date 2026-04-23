@@ -223,6 +223,8 @@ class Sidecar:
             return self._monitoring_timeline(params)
         if method == "monitoring_detectors":
             return self._monitoring_detectors(params)
+        if method == "run_eval":
+            return self._run_eval(params)
         if method == "shutdown":
             self._running = False
             return {"ok": True}
@@ -383,6 +385,53 @@ class Sidecar:
         if self._history is None:
             raise SidecarError("ERR_DISABLED", "history is disabled in this config")
         return {"detectors": self._history.detector_stats(limit=int(params.get("limit", 500)))}
+
+    def _run_eval(self, params: dict) -> dict:
+        import time
+        from beet.evaluation.dataset import EvalSample
+        from beet.evaluation.runner import eval_report_to_dict, run_eval
+
+        items = params.get("items") or []
+        if not isinstance(items, list) or not items:
+            raise SidecarError("ERR_BAD_PARAMS", "items required (non-empty list)")
+        cap = int(params.get("max_samples", 200))
+        cap = max(1, min(cap, 1000))
+        if len(items) > cap:
+            raise SidecarError(
+                "ERR_TOO_LARGE",
+                f"dataset has {len(items)} samples, cap is {cap} (max 1000)",
+            )
+        samples: list[EvalSample] = []
+        for idx, it in enumerate(items):
+            if not isinstance(it, dict):
+                raise SidecarError("ERR_BAD_PARAMS", f"item {idx} is not an object")
+            for required in ("id", "text", "label"):
+                if required not in it:
+                    raise SidecarError(
+                        "ERR_BAD_PARAMS", f"item {idx} missing field '{required}'"
+                    )
+            if not isinstance(it["text"], str) or not it["text"].strip():
+                raise SidecarError("ERR_BAD_PARAMS", f"item {idx} has empty text")
+            try:
+                samples.append(EvalSample(
+                    id=str(it["id"]),
+                    text=str(it["text"]),
+                    label=int(it["label"]),
+                    tier=it.get("tier"),
+                    source=it.get("source"),
+                    attack_name=it.get("attack_name"),
+                    attack_category=it.get("attack_category"),
+                    source_id=it.get("source_id"),
+                ))
+            except (TypeError, ValueError) as e:
+                raise SidecarError("ERR_BAD_PARAMS", f"item {idx} invalid: {e}") from e
+
+        t0 = time.monotonic()
+        report = run_eval(self._ctx.pipeline, samples)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        result = eval_report_to_dict(report)
+        result["duration_ms"] = duration_ms
+        return result
 
     def _record(
         self,
